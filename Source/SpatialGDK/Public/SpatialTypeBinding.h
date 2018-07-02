@@ -66,11 +66,10 @@ struct FPropertyChangeState
 class FRepHandleData
 {
 public:
-	FRepHandleData(UClass* Class, TArray<FName> PropertyNames, ELifetimeCondition InCondition, ELifetimeRepNotifyCondition InRepNotifyCondition, int32 InArrayOffset) :
+	FRepHandleData(UClass* Class, TArray<FName> PropertyNames, TArray<int32> PropertyIndicies, ELifetimeCondition InCondition, ELifetimeRepNotifyCondition InRepNotifyCondition) :
 		Condition(InCondition),
 		RepNotifyCondition(InRepNotifyCondition),
-		Offset(0),
-		ArrayOffset(InArrayOffset)
+		Offset(0)
 	{
 		// Build property chain.
 		check(PropertyNames.Num() > 0);
@@ -80,6 +79,7 @@ public:
 			checkf(CurrentContainerType, TEXT("A property in the chain (except the end) is not a container."));
 			UProperty* CurProperty = CurrentContainerType->FindPropertyByName(PropertyName);
 			PropertyChain.Add(CurProperty);
+
 			UStructProperty* StructProperty = Cast<UStructProperty>(CurProperty);
 			if (StructProperty)
 			{
@@ -93,23 +93,25 @@ public:
 		Property = PropertyChain[PropertyChain.Num() - 1];
 
 		// Calculate offset by summing the offsets of each property in the chain.
-		for (UProperty* CurProperty : PropertyChain)
+		for (int i = 0; i < PropertyChain.Num(); i++)
 		{
+			UProperty* CurProperty = PropertyChain[i];
+			// Calculate the static array offset of this specific property, using it's index and it's parents indicies.
+			int32 IndexOffset = PropertyIndicies[i] * CurProperty->ElementSize;
 			Offset += CurProperty->GetOffset_ForInternal();
+			Offset += IndexOffset;
 		}
 	}
 
 	FORCEINLINE uint8* GetPropertyData(uint8* Container) const
 	{
-		check(ArrayOffset <= Property->ArrayDim * Property->ElementSize);
-		return Container + Offset + ArrayOffset;
+		return Container + Offset;
 	}
 
   
 	FORCEINLINE const uint8* GetPropertyData(const uint8* Container) const
 	{
-		check(ArrayOffset <= Property->ArrayDim * Property->ElementSize);
-		return Container + Offset + ArrayOffset;
+		return Container + Offset;
 	}
 
 	TArray<UProperty*> PropertyChain;
@@ -119,7 +121,6 @@ public:
 
 private:
 	int32 Offset;
-	int32 ArrayOffset;
 };
 
 // A structure containing information about a migratable property.
