@@ -84,7 +84,7 @@ FString PropertyToSchemaType(UProperty* Property, bool bIsRPCProperty)
 	{
 		DataType = TEXT("uint64");
 	}
-	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()))
+	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()) || Property->IsA(UTextProperty::StaticClass()))
 	{
 		DataType = TEXT("string");
 	}
@@ -294,7 +294,7 @@ int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Clas
 		{
 			if (Group == ERPCType::RPC_NetMulticast)
 			{
-				checkf(RPC->bReliable == false, TEXT("%s: Unreal GDK currently does not support Reliable Multicast RPCs"), *RPC->Function->GetName());
+				//checkf(RPC->bReliable == false, TEXT("%s: Unreal GDK currently does not support Reliable Multicast RPCs"), *RPC->Function->GetName());
 
 				Writer.Printf("event %s.%s %s;",
 					*UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName()).ToLower(),
