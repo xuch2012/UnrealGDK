@@ -483,25 +483,40 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, const TArray<TArray<
 		}
 	} // END CMD FOR LOOP
 
+
+	// Plan of action
+	// 1- Move migratable properties to the top of the list, they are handled with priority. -- No need. Non-replicated properties are already handled (AST)
+	//  - Reasoning for this: We need to generate a checksum for the property even though it doesn't have a replication tag.
+	// 2- Tag Migratable properties with a bool for the RepLayoutData. 
+	// 3- Extract the checksum generation code so we can put it in RepLayoutData. We will still need the PropertyName to find it in the class but we can match via checksum.
+
+	FRepLayout MigratableRepLayout;
+	MigratableRepLayout.InitMigratablePropertiesFromObjectClass(Class);
+
 	// Process the migratable properties list.
 	uint16 MigratableDataHandle = 1;
-	for (const TArray<FName>& PropertyNames : MigratableProperties)
+	for (const TArray<FName>& PropertyChain : MigratableProperties)
 	{
 		// Find the property represented by this chain.
-		TSharedPtr<FUnrealProperty> MigratableProperty = nullptr;
-		TSharedPtr<FUnrealType> CurrentTypeNode = TypeNode;
-		for (FName PropertyName : PropertyNames)
+		TSharedPtr<FUnrealProperty> MigratablePropertyNode = nullptr;
+
+		// CurrentTypeNode is used as a proxy to recurse down the property chain in the following for each loop.
+		TSharedPtr<FUnrealType> CurrentTypeNode = TypeNode; 
+		for (FName PropertyName : PropertyChain) // UNR-334 We recurse into the property chain to find the correct property.
 		{
 			checkf(CurrentTypeNode.IsValid(), TEXT("A property in the chain (except the leaf) is not a struct property."));
-			UProperty* NextProperty = CurrentTypeNode->Type->FindPropertyByName(PropertyName);
-			checkf(NextProperty, TEXT("Cannot find property %s in container %s"), *PropertyName.ToString(), *CurrentTypeNode->Type->GetName());
-			MigratableProperty = CurrentTypeNode->Properties.FindChecked(NextProperty);
-			CurrentTypeNode = MigratableProperty->Type;
+
+			UProperty* PropertyInChain = CurrentTypeNode->Type->FindPropertyByName(PropertyName);
+			checkf(PropertyInChain, TEXT("Cannot find property %s in container %s"), *PropertyName.ToString(), *CurrentTypeNode->Type->GetName());
+
+			MigratablePropertyNode = CurrentTypeNode->Properties.FindChecked(PropertyInChain);
+			CurrentTypeNode = MigratablePropertyNode->Type;
 		}
 
 		// Create migratable data.
-		MigratableProperty->MigratableData = MakeShared<FUnrealMigratableData>();
-		MigratableProperty->MigratableData->Handle = MigratableDataHandle++;
+		// UNR-334 The MigratablePropertyNode will already have a checksum generated for it.
+		MigratablePropertyNode->MigratableData = MakeShared<FUnrealMigratableData>();
+		MigratablePropertyNode->MigratableData->Handle = MigratableDataHandle++;
 	}
 
 	return TypeNode;

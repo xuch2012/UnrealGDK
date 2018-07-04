@@ -900,29 +900,15 @@ void GenerateFunction_Init(FCodeWriter& SourceWriter, UClass* Class, const FUnre
 		SourceWriter.PrintNewLine();
 		SourceWriter.Print("// Populate RepHandleToPropertyMap.");
 
+		SourceWriter.Print("FRepLayout RepLayout;");
+		SourceWriter.Print("RepLayout.InitFromObjectClass(Class);");
+
 		for (auto& RepProp : ReplicatedProperties)
 		{
-			// Create property chain initialiser list.
-			FString PropertyChainInitList;
-			FString PropertyChainIndiciesInitList;
-			TArray<FString> PropertyChainNames;
-			TArray<FString> PropertyChainIndicies;
-			Algo::Transform(GetPropertyChain(RepProp.Value), PropertyChainNames, [](const TSharedPtr<FUnrealProperty>& PropertyInfo) -> FString
-			{
-				return TEXT("\"") + PropertyInfo->Property->GetFName().ToString() + TEXT("\"");
-			});
-			PropertyChainInitList = FString::Join(PropertyChainNames, TEXT(", "));
-
-			Algo::Transform(GetPropertyChain(RepProp.Value), PropertyChainIndicies, [](const TSharedPtr<FUnrealProperty>& PropertyInfo) -> FString
-			{
-				return FString::FromInt(PropertyInfo->StaticArrayIndex);
-			});
-			PropertyChainIndiciesInitList = FString::Join(PropertyChainIndicies, TEXT(", "));
-
-			SourceWriter.Printf("RepHandleToPropertyMap.Add(%d, FRepHandleData(Class, {%s}, {%s}, %s, %s));",
+			// UNR-334 Provide the handle, checksum and the RepLayout to find the correct property at runtime initialisation.
+			SourceWriter.Printf("RepHandleToPropertyMap.Add(%d, FRepHandleData(Class, %u, RepLayout, %s, %s));",
 				RepProp.Value->ReplicationData->Handle,
-				*PropertyChainInitList,
-				*PropertyChainIndiciesInitList,
+				RepProp.Value->CompatibleChecksum,
 				*GetLifetimeConditionAsString(RepProp.Value->ReplicationData->Condition),
 				*GetRepNotifyLifetimeConditionAsString(RepProp.Value->ReplicationData->RepNotifyCondition));
 		}
@@ -946,6 +932,9 @@ void GenerateFunction_Init(FCodeWriter& SourceWriter, UClass* Class, const FUnre
 				return TEXT("\"") + Property->Property->GetFName().ToString() + TEXT("\"");
 			});
 			PropertyChainInitList = FString::Join(PropertyChainNames, TEXT(", "));
+
+			// UNR-334 Pass the checksum into the FMigratableHandleData.
+			// Use the property chain on the other side to 
 
 			// Add the handle data to the map.
 			SourceWriter.Printf("MigratableHandleToPropertyMap.Add(%d, FMigratableHandleData(Class, {%s}));",

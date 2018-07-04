@@ -163,10 +163,10 @@ const bool ClassesExist(const ClassHeaderMap& Classes)
 void GenerateInteropFromClasses(const ClassHeaderMap& Classes, const FString& CombinedSchemaPath, const FString& CombinedForwardingCodePath)
 {
 	TMap<FString, TArray<TArray<FName>>> MigratableProperties;
-	MigratableProperties.Add("PlayerController", {
+	MigratableProperties.Add("SampleGamePlayerController", {
 		{ "AcknowledgedPawn" }
 	});
-	MigratableProperties.Add("Character", {
+	MigratableProperties.Add("SampleGameCharacter", {
 		{ "CharacterMovement", "GroundMovementMode" },
 		{ "CharacterMovement", "MovementMode" },
 		{ "CharacterMovement", "CustomMovementMode" }

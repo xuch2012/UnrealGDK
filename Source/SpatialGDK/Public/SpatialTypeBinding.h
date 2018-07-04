@@ -66,41 +66,15 @@ struct FPropertyChangeState
 class FRepHandleData
 {
 public:
-	FRepHandleData(UClass* Class, TArray<FName> PropertyNames, TArray<int32> PropertyIndicies, ELifetimeCondition InCondition, ELifetimeRepNotifyCondition InRepNotifyCondition) :
+	FRepHandleData(UClass* Class, uint32 PropertyChecksum, const FRepLayout& RepLayout, ELifetimeCondition InCondition, ELifetimeRepNotifyCondition InRepNotifyCondition) :
 		Condition(InCondition),
 		RepNotifyCondition(InRepNotifyCondition),
 		Offset(0)
 	{
-		// Build property chain.
-		check(PropertyNames.Num() > 0);
-		UStruct* CurrentContainerType = Class;
-		for (FName PropertyName : PropertyNames)
-		{
-			checkf(CurrentContainerType, TEXT("A property in the chain (except the end) is not a container."));
-			UProperty* CurProperty = CurrentContainerType->FindPropertyByName(PropertyName);
-			PropertyChain.Add(CurProperty);
-
-			UStructProperty* StructProperty = Cast<UStructProperty>(CurProperty);
-			if (StructProperty)
-			{
-				CurrentContainerType = StructProperty->Struct;
-			}
-			else
-			{
-				CurrentContainerType = nullptr;
-			}
-		}
-		Property = PropertyChain[PropertyChain.Num() - 1];
-
-		// Calculate offset by summing the offsets of each property in the chain.
-		for (int i = 0; i < PropertyChain.Num(); i++)
-		{
-			UProperty* CurProperty = PropertyChain[i];
-			// Calculate the static array offset of this specific property, using it's index and it's parents indicies.
-			int32 IndexOffset = PropertyIndicies[i] * CurProperty->ElementSize;
-			Offset += CurProperty->GetOffset_ForInternal();
-			Offset += IndexOffset;
-		}
+		FRepLayoutCmd Cmd = RepLayout.Cmds[RepLayout.FindCompatibleProperty(0, RepLayout.Cmds.Num() - 1, PropertyChecksum)];
+		Property = Cmd.Property;	
+		Offset = Cmd.Offset;
+		ParentProperty = RepLayout.Parents[Cmd.ParentIndex].Property;
 	}
 
 	FORCEINLINE uint8* GetPropertyData(uint8* Container) const
@@ -114,10 +88,11 @@ public:
 		return Container + Offset;
 	}
 
-	TArray<UProperty*> PropertyChain;
 	UProperty* Property;
+	UProperty* ParentProperty;
 	ELifetimeCondition Condition;
 	ELifetimeRepNotifyCondition RepNotifyCondition;
+
 
 private:
 	int32 Offset;
