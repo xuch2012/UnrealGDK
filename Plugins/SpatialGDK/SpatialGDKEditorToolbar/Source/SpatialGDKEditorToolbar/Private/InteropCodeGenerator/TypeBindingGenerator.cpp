@@ -685,7 +685,7 @@ void GenerateTypeBindingSource(FCodeWriter& SourceWriter, FString SchemaFilename
 	SourceWriter.Printf(R"""(
 		// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
 		// Note that this file has been generated automatically
-
+		#include "Scavenger.h"
 		#include "%s.h"
 
 		#include "GameFramework/PlayerState.h"

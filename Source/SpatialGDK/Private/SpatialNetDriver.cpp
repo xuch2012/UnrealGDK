@@ -808,7 +808,7 @@ USpatialNetConnection * USpatialNetDriver::GetSpatialOSNetConnection() const
 	}
 	else
 	{
-		if(ClientConnections[0])
+		if(ClientConnections.Num() > 0)
 		{
 			return Cast<USpatialNetConnection>(ClientConnections[0]);
 		}
