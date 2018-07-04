@@ -284,6 +284,10 @@ void GenerateUnrealToSchemaConversion(FCodeWriter& Writer, const FString& Update
 	{
 		Writer.Printf("%s(TCHAR_TO_UTF8(*%s));", *Update, *PropertyValue);
 	}
+	else if (Property->IsA(UTextProperty::StaticClass()))
+	{
+		Writer.Printf("%s(TCHAR_TO_UTF8(*%s.ToString()));", *Update, *PropertyValue);
+	}
 	else if (Property->IsA(UArrayProperty::StaticClass()))
 	{
 		UArrayProperty* ArrayProperty = Cast<UArrayProperty>(Property);
@@ -440,6 +444,10 @@ void GeneratePropertyToUnrealConversion(FCodeWriter& Writer, const FString& Upda
 	else if (Property->IsA(UStrProperty::StaticClass()))
 	{
 		Writer.Printf("%s = FString(UTF8_TO_TCHAR(%s.c_str()));", *PropertyValue, *Update);
+	}
+	else if (Property->IsA(UTextProperty::StaticClass()))
+	{
+		Writer.Printf("%s = FText::FromString((%s).data());", *PropertyValue, *Update);
 	}
 	else if (Property->IsA(UArrayProperty::StaticClass())) {
 		const UArrayProperty* ArrayProperty = Cast<UArrayProperty>(Property);
