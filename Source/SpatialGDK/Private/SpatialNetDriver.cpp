@@ -808,7 +808,14 @@ USpatialNetConnection * USpatialNetDriver::GetSpatialOSNetConnection() const
 	}
 	else
 	{
-		return Cast<USpatialNetConnection>(ClientConnections[0]);
+		if(ClientConnections[0])
+		{
+			return Cast<USpatialNetConnection>(ClientConnections[0]);
+		}
+		else
+		{
+			return nullptr;
+		}
 	}
 }
 

@@ -279,8 +279,11 @@ void USpatialInteropPipelineBlock::CleanupDeletedEntity(const FEntityId& EntityI
 {
 	EntityRegistry->RemoveFromRegistry(EntityId);
 	NetDriver->GetSpatialInterop()->RemoveActorChannel(EntityId.ToSpatialEntityId());
-	auto* PackageMap = Cast<USpatialPackageMapClient>(NetDriver->GetSpatialOSNetConnection()->PackageMap);
-	PackageMap->RemoveEntityActor(EntityId);
+	if(NetDriver->GetSpatialOSNetConnection())
+	{
+		auto* PackageMap = Cast<USpatialPackageMapClient>(NetDriver->GetSpatialOSNetConnection()->PackageMap);
+		PackageMap->RemoveEntityActor(EntityId);
+	}
 }
 
 void USpatialInteropPipelineBlock::ProcessOps(const TWeakPtr<SpatialOSView>&, const TWeakPtr<SpatialOSConnection>&, UWorld*, UCallbackDispatcher*)
