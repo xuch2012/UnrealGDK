@@ -32,6 +32,8 @@ int GenerateCompleteSchemaFromClass(const FString& SchemaPath, const FString& Fo
 	// Parent and static array index start at 0 for checksum calculations.
 	TSharedPtr<FUnrealType> TypeInfo = CreateUnrealTypeInfo(Class, 0, 0, false);
 
+	TSharedPtr<FUnrealReplicationDataWrapper> ReplicationData = CreateUnrealTypeInfoNew(Class);
+
 	// Generate schema.
 	int NumComponents = GenerateTypeBindingSchema(OutputSchema, ComponentId, Class, TypeInfo, SchemaPath);
 	OutputSchema.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *SchemaFilename));

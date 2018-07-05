@@ -123,6 +123,15 @@ struct FUnrealProperty
 	uint32 ParentChecksum;
 };
 
+// A node which represents an unreal type, such as ACharacter or UCharacterMovementComponent.
+struct FUnrealReplicationDataWrapper
+{
+	FRepLayout ReplicatedPropertyData;
+	FRepLayout MigratablePropertyData;
+
+	TMap<UFunction*, FRepLayout> RPCs;
+};
+
 // A node which represents an RPC.
 struct FUnrealRPC
 {
@@ -151,6 +160,7 @@ struct FUnrealMigratableData
 };
 
 using FUnrealFlatRepData = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPtr<FUnrealProperty>>>;
+using FUnrealFlatRepDataNew = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPtr<FUnrealProperty>>>;
 using FUnrealRPCsByType = TMap<ERPCType, TArray<TSharedPtr<FUnrealRPC>>>;
 using FCmdHandlePropertyMap = TMap<uint16, TSharedPtr<FUnrealProperty>>;
 
@@ -192,8 +202,7 @@ void VisitAllProperties(TSharedPtr<FUnrealRPC> RPCNode, TFunction<bool(TSharedPt
 // Generates a unique checksum for the Property that allows matching to Unreal's RepLayout Cmds.
 uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 StaticArrayIndex);
 
-// Creates a new FUnrealProperty for the included UProperty, generates a checksum for it and then adds it to the TypeNode included.
-TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNode, UProperty* Property, uint32 ParentChecksum, uint32 StaticArrayIndex);
+TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class);
 
 // Generates an AST from an Unreal UStruct or UClass.
 // At the moment, this function receives a manual list of migratable property chains in this form:

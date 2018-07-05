@@ -102,69 +102,38 @@ private:
 class FMigratableHandleData
 {
 public:
-	FMigratableHandleData(UClass* Class, TArray<FName> PropertyNames) :
+	FMigratableHandleData(UClass* Class, uint32 PropertyChecksum, const FRepLayout& RepLayout) :
     SubobjectProperty(false),
     Offset(0)
 	{
-		// Build property chain.
-		check(PropertyNames.Num() > 0);
-		UStruct* CurrentContainerType = Class;
-		for (FName PropertyName : PropertyNames)
-		{
-			checkf(CurrentContainerType, TEXT("A property in the chain (except the end) is not a container."));
-			UProperty* CurProperty = CurrentContainerType->FindPropertyByName(PropertyName);
-			check(CurProperty);
-			PropertyChain.Add(CurProperty);
-			if (!SubobjectProperty)
-			{
-				Offset += CurProperty->GetOffset_ForInternal();
-			}
-			UStructProperty* StructProperty = Cast<UStructProperty>(CurProperty);
-			if (StructProperty)
-			{
-				CurrentContainerType = StructProperty->Struct;
-			}
-			else
-			{
-				UObjectProperty* ObjectProperty = Cast<UObjectProperty>(CurProperty);
-				if (ObjectProperty)
-				{
-					CurrentContainerType = ObjectProperty->PropertyClass;
-					SubobjectProperty = true; // We are now recursing into a subobjects properties.
-					Offset = 0;
-				}
-				else
-				{
-					// We should only encounter a non-container style property if this is the final property in the chain.
-					// Otherwise, the above check will be hit.
-					CurrentContainerType = nullptr;
-				}
-			}
-		}
-		Property = PropertyChain[PropertyChain.Num() - 1];
+		FRepLayoutCmd Cmd = RepLayout.Cmds[RepLayout.FindCompatibleProperty(0, RepLayout.Cmds.Num() - 1, PropertyChecksum)];
+		Property = Cmd.Property;
+		Offset = Cmd.Offset;
+		//ParentProperty = RepLayout.Parents[Cmd.ParentIndex].Property;
 	}
 
 	FORCEINLINE uint8* GetPropertyData(uint8* Container) const
 	{
+		// UNR-334 We need to reconsider SubObject replication for this instance.
 		if (SubobjectProperty)
 		{
 			uint8* Data = Container;
-			for (int i = 0; i < PropertyChain.Num(); ++i)
-			{
-				Data += PropertyChain[i]->GetOffset_ForInternal();
+			//for (int i = 0; i < PropertyChain.Num(); ++i)
+			//{
+			//	Data += PropertyChain[i]->GetOffset_ForInternal();
 
-				// If we're not the last property in the chain.
-				if (i < (PropertyChain.Num() - 1))
-				{
-					// Migratable property chains can cross into subobjects, so we will need to deal with objects which are not inlined into the container.
-					UObjectProperty* ObjectProperty = Cast<UObjectProperty>(PropertyChain[i]);
-					if (ObjectProperty)
-					{
-						UObject* PropertyValue = ObjectProperty->GetObjectPropertyValue(Data);
-						Data = (uint8*)PropertyValue;
-					}
-				}
-			}
+			//	// If we're not the last property in the chain.
+			//	if (i < (PropertyChain.Num() - 1))
+			//	{
+			//		// Migratable property chains can cross into subobjects, so we will need to deal with objects which are not inlined into the container.
+			//		UObjectProperty* ObjectProperty = Cast<UObjectProperty>(PropertyChain[i]);
+			//		if (ObjectProperty)
+			//		{
+			//			UObject* PropertyValue = ObjectProperty->GetObjectPropertyValue(Data);
+			//			Data = (uint8*)PropertyValue;
+			//		}
+			//	}
+			//}
 			return Data;
 		}
 		else
@@ -178,7 +147,6 @@ public:
 		return GetPropertyData((uint8*)Container);
 	}
 
-	TArray<UProperty*> PropertyChain;
 	UProperty* Property;
 
 private:

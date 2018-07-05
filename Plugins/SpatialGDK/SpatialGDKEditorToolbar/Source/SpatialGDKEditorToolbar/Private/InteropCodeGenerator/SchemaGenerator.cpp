@@ -138,6 +138,192 @@ void WriteSchemaRPCField(TSharedPtr<FCodeWriter> Writer, const TSharedPtr<FUnrea
 	);
 }
 
+int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* Class, TSharedPtr<FUnrealReplicationDataWrapper> ReplicationData, FString SchemaPath)
+{
+	FComponentIdGenerator IdGenerator(ComponentId);
+
+	Writer.Printf(R"""(
+		// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+		// Note that this file has been generated automatically
+		package improbable.unreal.generated.%s;
+
+		import "improbable/unreal/gdk/core_types.schema";)""", *UnrealNameToSchemaTypeName(Class->GetName().ToLower()));
+	Writer.PrintNewLine();
+
+	// Build Single and Multi client replication data fields.
+	for(int i = 0; i < ReplicationData->ReplicatedPropertyData.Cmds.Num(); i++)
+	{
+		FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
+		FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
+
+		FString NewSchemaField;
+		NewSchemaField.Printf("%s %s = %d;",
+			*PropertyToSchemaType(Cmd.Property, false),
+			*SchemaFieldName(Cmd, Parent)
+		);
+
+		switch (Parent.RepNotifyCondition)
+		{
+		case COND_AutonomousOnly:
+		case COND_OwnerOnly:
+			Writer.AddClientRPCRepDataField(NewSchemaField);
+		default:
+			Writer.AddMultiClientRepDataField(NewSchemaField);
+		}
+	}
+
+	// Build migratable data fields
+	for (int i = 0; i < ReplicationData->MigratablePropertyData.Cmds.Num(); i++)
+	{
+		FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
+		FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
+
+		FString NewSchemaField;
+		Writer.Printf("%s %s = %d;",
+			*PropertyToSchemaType(Cmd.Property, false),
+			*SchemaFieldName(Cmd, Parent)
+		);
+	}
+
+	// Build RPC data fields
+	for(TPair<UFunction*, FRepLayout> RPCFunction : ReplicationData->RPCs)
+	{
+		
+	}
+
+
+
+	// RPC components.
+	FUnrealRPCsByType RPCsByType = GetAllRPCsByType(TypeInfo);
+	TArray<FString> RPCTypeOwners = GetRPCTypeOwners(TypeInfo);
+
+	// Remove underscores
+	for (auto& RPCTypeOwner : RPCTypeOwners)
+	{
+		RPCTypeOwner = UnrealNameToSchemaTypeName(RPCTypeOwner);
+	}
+
+	TMap<FString, TSharedPtr<FCodeWriter>> RPCTypeCodeWriterMap;
+
+	for (auto& RPCTypeOwner : RPCTypeOwners)
+	{
+		Writer.Printf("import \"improbable/unreal/generated/Unreal%sTypes.schema\";", *RPCTypeOwner);
+		TSharedPtr<FCodeWriter> RPCTypeOwnerSchemaWriter = MakeShared<FCodeWriter>();
+		RPCTypeCodeWriterMap.Add(*RPCTypeOwner, RPCTypeOwnerSchemaWriter);
+		RPCTypeOwnerSchemaWriter->Printf(R"""(
+			// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+			// Note that this file has been generated automatically
+			package improbable.unreal.generated.%s;
+
+			import "improbable/unreal/gdk/core_types.schema";)""", *RPCTypeOwner.ToLower());
+		RPCTypeOwnerSchemaWriter->PrintNewLine();
+	}
+	Writer.PrintNewLine();
+
+	if (Function->FunctionFlags & EFunctionFlags::FUNC_NetClient)
+	{
+		return ERPCType::RPC_Client;
+	}
+	if (Function->FunctionFlags & EFunctionFlags::FUNC_NetServer)
+	{
+		return ERPCType::RPC_Server;
+	}
+	if (Function->FunctionFlags & EFunctionFlags::FUNC_NetMulticast)
+	{
+		return ERPCType::RPC_NetMulticast;
+	}
+	else
+	{
+		checkNoEntry();
+		return ERPCType::RPC_Unknown;
+	}
+
+	FString GetRPCTypeName(ERPCType RPCType)
+	{
+		switch (RPCType)
+		{
+		case ERPCType::RPC_Client:
+			return "Client";
+		case ERPCType::RPC_Server:
+			return "Server";
+		case ERPCType::RPC_NetMulticast:
+			return "NetMulticast";
+		default:
+			checkf(false, TEXT("RPCType is invalid!"));
+			return "";
+		}
+	}
+
+	for (auto Group : GetRPCTypes())
+	{
+		// Generate schema RPC command types
+		for (auto& RPC : RPCsByType[Group])
+		{
+			FString TypeStr = SchemaRPCRequestType(RPC->Function);
+
+			// Get the correct code writer for this RPC.
+			FString RPCOwnerName = UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName());
+			TSharedPtr<FCodeWriter> RPCTypeOwnerSchemaWriter = RPCTypeCodeWriterMap[*RPCOwnerName];
+
+			RPCTypeOwnerSchemaWriter->Printf("type %s {", *TypeStr);
+			RPCTypeOwnerSchemaWriter->Indent();
+
+			// Recurse into functions properties and build a complete transitive property list.
+			TArray<TSharedPtr<FUnrealProperty>> ParamList = GetFlatRPCParameters(RPC);
+
+			// RPC target sub-object offset.
+			RPCTypeOwnerSchemaWriter->Printf("uint32 target_subobject_offset = 1;");
+			FieldCounter = 1;
+
+			for (auto& Param : ParamList)
+			{
+				FieldCounter++;
+				WriteSchemaRPCField(RPCTypeOwnerSchemaWriter,
+					Param,
+					FieldCounter);
+			}
+			RPCTypeOwnerSchemaWriter->Outdent().Print("}");
+		}
+	}
+
+	// Save RPC type owner schema files to disk.
+	for (auto& RPCTypeOwner : RPCTypeOwners)
+	{
+		TSharedPtr<FCodeWriter> RPCTypeOwnerSchemaWriter = RPCTypeCodeWriterMap[*RPCTypeOwner];
+		FString RPCTypeOwnerSchemaFilename = FString::Printf(TEXT("Unreal%sTypes"), *RPCTypeOwner);
+		RPCTypeOwnerSchemaWriter->WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *RPCTypeOwnerSchemaFilename));
+	}
+
+	for (auto Group : GetRPCTypes())
+	{
+		Writer.Printf("component %s {", *SchemaRPCComponentName(Group, Class));
+		Writer.Indent();
+		Writer.Printf("id = %i;", IdGenerator.GetNextAvailableId());
+		for (auto& RPC : RPCsByType[Group])
+		{
+			if (Group == ERPCType::RPC_NetMulticast)
+			{
+				checkf(RPC->bReliable == false, TEXT("%s: Unreal GDK currently does not support Reliable Multicast RPCs"), *RPC->Function->GetName());
+
+				Writer.Printf("event %s.%s %s;",
+					*UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName()).ToLower(),
+					*SchemaRPCRequestType(RPC->Function),
+					*SchemaRPCName(Class, RPC->Function));
+			}
+			else
+			{
+				Writer.Printf("command UnrealRPCCommandResponse %s(%s.%s);",
+					*SchemaRPCName(Class, RPC->Function),
+					*UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName()).ToLower(),
+					*SchemaRPCRequestType(RPC->Function));
+			}
+		}
+		Writer.Outdent().Print("}");
+	}
+
+	return IdGenerator.GetNumUsedIds();
+}
+
 int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)
 {
 	FComponentIdGenerator IdGenerator(ComponentId);

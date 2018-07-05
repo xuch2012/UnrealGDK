@@ -150,18 +150,27 @@ uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 Static
 	return Checksum;
 }
 
-TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNode, UProperty* Property, uint32 ParentChecksum, uint32 StaticArrayIndex)
+TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class)
 {
-	TSharedPtr<FUnrealProperty> PropertyNode = MakeShared<FUnrealProperty>();
-	PropertyNode->Property = Property;
-	PropertyNode->ContainerType = TypeNode;
-	PropertyNode->ParentChecksum = ParentChecksum;
-	PropertyNode->StaticArrayIndex = StaticArrayIndex;
+	TSharedPtr<FUnrealReplicationDataWrapper> RepDataWrapper = MakeShared<FUnrealReplicationDataWrapper>();
 
-	// Generate a checksum for this PropertyNode to be used to match properties with the RepLayout Cmds later.
-	PropertyNode->CompatibleChecksum = GenerateChecksum(Property, ParentChecksum, StaticArrayIndex);
-	TypeNode->Properties.Add(Property, PropertyNode);
-	return PropertyNode;
+	RepDataWrapper->ReplicatedPropertyData.InitFromObjectClass(Class);
+	RepDataWrapper->MigratablePropertyData.InitMigratablePropertiesFromObjectClass(Class);
+
+	// Iterate through each RPC in the class.
+	for (TFieldIterator<UFunction> RemoteFunction(Class); RemoteFunction; ++RemoteFunction)
+	{
+		if (RemoteFunction->FunctionFlags & FUNC_NetClient ||
+			RemoteFunction->FunctionFlags & FUNC_NetServer ||
+			RemoteFunction->FunctionFlags & FUNC_NetMulticast)
+		{
+			FRepLayout RPCData;
+			RPCData.InitFromFunction(*RemoteFunction);
+			RepDataWrapper->RPCs.Add(*RemoteFunction, RPCData);
+		}
+	}
+
+	return RepDataWrapper;
 }
 
 TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksum, int32 StaticArrayIndex, bool bIsRPC)

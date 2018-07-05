@@ -28,10 +28,47 @@ class FCodeWriter
 public:
 	FCodeWriter();
 
+	TArray<FString> Imports;
+	TArray<FString> SingleClientRepData;
+	TArray<FString> MultiClientRepData;
+	TArray<FString> ClientRPCRepData;
+	TArray<FString> ServerRPCRepData;
+	TArray<FString> MulticastRPCRepData;
+
 	template <typename... T>
 	FCodeWriter& Printf(const FString& Format, const T&... Args)
 	{
 		return Print(FString::Printf(*Format, Args...));
+	}
+
+	void AddImport(FString Import)
+	{
+		Imports.Add(Import);
+	}
+
+	void AddSingleClientRepDataField(FString RepDataFieldString)
+	{
+		SingleClientRepData.Add(RepDataFieldString);
+	}
+
+	void AddMultiClientRepDataField(FString RepDataFieldString)
+	{
+		MultiClientRepData.Add(RepDataFieldString);
+	}
+
+	void AddClientRPCRepDataField(FString RepDataFieldString)
+	{
+		ClientRPCRepData.Add(RepDataFieldString);
+	}
+
+	void AddServerRPCRepDataField(FString RepDataFieldString)
+	{
+		ServerRPCRepData.Add(RepDataFieldString);
+	}
+
+	void AddMulticastRPCRepDataField(FString RepDataFieldString)
+	{
+		MulticastRPCRepData.Add(RepDataFieldString);
 	}
 
 	FCodeWriter& PrintNewLine();

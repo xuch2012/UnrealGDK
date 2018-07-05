@@ -85,3 +85,12 @@ FString SchemaFieldName(const TSharedPtr<FUnrealProperty> Property)
 	FString FieldName = TEXT("field_") + FString::Join(ChainNames, TEXT("_"));
 	return FieldName;
 }
+
+FString SchemaFieldName(const FRepLayoutCmd Cmd, const FRepParentCmd Parent)
+{
+	// Prefix is required to disambiguate between properties in the generated code and UActorComponent/UObject properties
+	// which the generated code extends :troll:.
+	// TODO: Make this easier to read.
+	FString FieldName = TEXT("field_") + UnrealNameToSchemaTypeName(Parent.Property->GetName().ToLower()) + FString::FromInt(Parent.ArrayIndex) + "_" + UnrealNameToSchemaTypeName(Cmd.Property->GetName().ToLower()) + "_" + FString::FromInt(Cmd.CompatibleChecksum);
+	return FieldName;
+}
