@@ -1,4 +1,5 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+#pragma optimize("", off)
 
 #include "SchemaGenerator.h"
 
@@ -138,6 +139,7 @@ void WriteSchemaRPCField(TSharedPtr<FCodeWriter> Writer, const TSharedPtr<FUnrea
 	);
 }
 
+// TODO: This function needs a heavy refactor when it's functional.
 int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* Class, TSharedPtr<FUnrealReplicationDataWrapper> ReplicationData, FString SchemaPath)
 {
 	FComponentIdGenerator IdGenerator(ComponentId);
@@ -148,66 +150,110 @@ int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* C
 		package improbable.unreal.generated.%s;
 
 		import "improbable/unreal/gdk/core_types.schema";)""", *UnrealNameToSchemaTypeName(Class->GetName().ToLower()));
-	Writer.PrintNewLine();
+
+	int SingleClientRepDataFieldCounter = 2;
+	int MultiClientRepDataFieldCounter = 2;
 
 	// Build Single and Multi client replication data fields.
-	for(int i = 0; i < ReplicationData->ReplicatedPropertyData.Cmds.Num(); i++)
+	for (int i = 0; i < ReplicationData->ReplicatedPropertyData.Cmds.Num(); ++i)
 	{
-		FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
-		FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
-
-		FString NewSchemaField;
-		NewSchemaField.Printf("%s %s = %d;",
-			*PropertyToSchemaType(Cmd.Property, false),
-			*SchemaFieldName(Cmd, Parent)
-		);
-
-		switch (Parent.RepNotifyCondition)
+		if (ReplicationData->ReplicatedPropertyData.Cmds[i].Property) // We want to ignore return commands which have null properties.
 		{
-		case COND_AutonomousOnly:
-		case COND_OwnerOnly:
-			Writer.AddClientRPCRepDataField(NewSchemaField);
-		default:
-			Writer.AddMultiClientRepDataField(NewSchemaField);
+			FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
+			FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
+
+			FString NewSchemaField;
+
+			switch (Parent.Condition)
+			{
+			case COND_AutonomousOnly:
+			case COND_OwnerOnly:
+				NewSchemaField = FString::Printf(TEXT("%s %s = %d;"),
+					*PropertyToSchemaType(Cmd.Property, false),
+					*SchemaFieldName(Cmd, Parent),
+					SingleClientRepDataFieldCounter++
+				);
+
+				Writer.AddSingleClientRepDataField(NewSchemaField);
+			default:
+				NewSchemaField = FString::Printf(TEXT("%s %s = %d;"),
+					*PropertyToSchemaType(Cmd.Property, false),
+					*SchemaFieldName(Cmd, Parent),
+					MultiClientRepDataFieldCounter++
+				);
+				Writer.AddMultiClientRepDataField(NewSchemaField);
+			}
 		}
 	}
 
+	int MigratableDataFieldCounter = 2;
 	// Build migratable data fields
 	for (int i = 0; i < ReplicationData->MigratablePropertyData.Cmds.Num(); i++)
 	{
-		FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
-		FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
+		if (ReplicationData->MigratablePropertyData.Cmds[i].Property)
+		{
+			FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
+			FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
 
-		FString NewSchemaField;
-		Writer.Printf("%s %s = %d;",
-			*PropertyToSchemaType(Cmd.Property, false),
-			*SchemaFieldName(Cmd, Parent)
-		);
+			FString NewSchemaField;
+			NewSchemaField = FString::Printf(TEXT("%s %s = %d;"),
+				*PropertyToSchemaType(Cmd.Property, false),
+				*SchemaFieldName(Cmd, Parent),
+				MigratableDataFieldCounter++
+			);
+
+			Writer.AddServerRPCRepDataField(NewSchemaField);
+		}
 	}
 
-	// Build RPC data fields
-	for(TPair<UFunction*, FRepLayout> RPCFunction : ReplicationData->RPCs)
+	// Print the replicated schema fields before the RPCs
+	// Print the SingleClientRepData
+	Writer.PrintNewLine();
+	Writer.Printf("component %s {", *SchemaReplicatedDataName(REP_SingleClient, Class));
+	Writer.Indent();
+	Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
+	for (FString SchemaField : Writer.SingleClientRepData)
 	{
-		
+		Writer.Printf(SchemaField);
 	}
+	Writer.Outdent().Print("}");
+	Writer.PrintNewLine();
 
-
-
-	// RPC components.
-	FUnrealRPCsByType RPCsByType = GetAllRPCsByType(TypeInfo);
-	TArray<FString> RPCTypeOwners = GetRPCTypeOwners(TypeInfo);
-
-	// Remove underscores
-	for (auto& RPCTypeOwner : RPCTypeOwners)
+	// Print the MultiClientRepData
+	Writer.Printf("component %s {", *SchemaReplicatedDataName(REP_MultiClient, Class));
+	Writer.Indent();
+	Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
+	for (FString SchemaField : Writer.MultiClientRepData)
 	{
-		RPCTypeOwner = UnrealNameToSchemaTypeName(RPCTypeOwner);
+		Writer.Printf(SchemaField);
+	}
+	Writer.Outdent().Print("}");
+	Writer.PrintNewLine();
+
+	// Print the MigratableRepData
+	Writer.Printf("component %s {", *SchemaMigratableDataName(Class));
+	Writer.Indent();
+	Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
+	for (FString SchemaField : Writer.ServerRPCRepData)
+	{
+		Writer.Printf(SchemaField);
+	}
+	Writer.Outdent().Print("}");
+
+	// Build RPCs
+	// We create a new code writer for each RPC owner class. These become ClassName_Types.schema
+	TArray<FString> RPCTypeOwners;
+	for(auto& RPCFunction : ReplicationData->RPCs)
+	{
+		RPCTypeOwners.AddUnique(UnrealNameToSchemaTypeName(RPCFunction.Key->GetOuter()->GetName()));
 	}
 
 	TMap<FString, TSharedPtr<FCodeWriter>> RPCTypeCodeWriterMap;
 
+	// Get the class owner of each RPC so we can create the schema components in the correct files.
 	for (auto& RPCTypeOwner : RPCTypeOwners)
 	{
-		Writer.Printf("import \"improbable/unreal/generated/Unreal%sTypes.schema\";", *RPCTypeOwner);
+		Writer.Printf(TEXT("import \"improbable/unreal/generated/Unreal%sTypes.schema\";"), *RPCTypeOwner);
 		TSharedPtr<FCodeWriter> RPCTypeOwnerSchemaWriter = MakeShared<FCodeWriter>();
 		RPCTypeCodeWriterMap.Add(*RPCTypeOwner, RPCTypeOwnerSchemaWriter);
 		RPCTypeOwnerSchemaWriter->Printf(R"""(
@@ -220,67 +266,41 @@ int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* C
 	}
 	Writer.PrintNewLine();
 
-	if (Function->FunctionFlags & EFunctionFlags::FUNC_NetClient)
-	{
-		return ERPCType::RPC_Client;
-	}
-	if (Function->FunctionFlags & EFunctionFlags::FUNC_NetServer)
-	{
-		return ERPCType::RPC_Server;
-	}
-	if (Function->FunctionFlags & EFunctionFlags::FUNC_NetMulticast)
-	{
-		return ERPCType::RPC_NetMulticast;
-	}
-	else
-	{
-		checkNoEntry();
-		return ERPCType::RPC_Unknown;
-	}
-
-	FString GetRPCTypeName(ERPCType RPCType)
-	{
-		switch (RPCType)
-		{
-		case ERPCType::RPC_Client:
-			return "Client";
-		case ERPCType::RPC_Server:
-			return "Server";
-		case ERPCType::RPC_NetMulticast:
-			return "NetMulticast";
-		default:
-			checkf(false, TEXT("RPCType is invalid!"));
-			return "";
-		}
-	}
-
+	FUnrealRPCsByTypeNew RPCsByType = GetAllRPCsByTypeNew(ReplicationData->RPCs);
 	for (auto Group : GetRPCTypes())
 	{
+		auto thing = RPCsByType[Group];
+
 		// Generate schema RPC command types
 		for (auto& RPC : RPCsByType[Group])
 		{
-			FString TypeStr = SchemaRPCRequestType(RPC->Function);
+			FString TypeStr = SchemaRPCRequestType(RPC.Key);
 
 			// Get the correct code writer for this RPC.
-			FString RPCOwnerName = UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName());
+			FString RPCOwnerName = UnrealNameToSchemaTypeName(*RPC.Key->GetOuter()->GetName());
 			TSharedPtr<FCodeWriter> RPCTypeOwnerSchemaWriter = RPCTypeCodeWriterMap[*RPCOwnerName];
 
 			RPCTypeOwnerSchemaWriter->Printf("type %s {", *TypeStr);
 			RPCTypeOwnerSchemaWriter->Indent();
 
-			// Recurse into functions properties and build a complete transitive property list.
-			TArray<TSharedPtr<FUnrealProperty>> ParamList = GetFlatRPCParameters(RPC);
+			FRepLayout* RPCRepLayout = RPC.Value;
 
 			// RPC target sub-object offset.
 			RPCTypeOwnerSchemaWriter->Printf("uint32 target_subobject_offset = 1;");
-			FieldCounter = 1;
+			int FieldCounter = 2;
 
-			for (auto& Param : ParamList)
+			for(int i = 0; i < RPCRepLayout->Cmds.Num(); ++i)
 			{
-				FieldCounter++;
-				WriteSchemaRPCField(RPCTypeOwnerSchemaWriter,
-					Param,
-					FieldCounter);
+				if(RPCRepLayout->Cmds[i].Property) // We want to ignore return commands which have null properties.
+				{
+					FRepLayoutCmd RPCCmd = RPCRepLayout->Cmds[i];
+					FRepParentCmd RPCParent = RPCRepLayout->Parents[RPCCmd.ParentIndex];
+					RPCTypeOwnerSchemaWriter->Printf("%s %s = %d;",
+						*PropertyToSchemaType(RPCCmd.Property, true),
+						*SchemaFieldName(RPCCmd, RPCParent),
+						FieldCounter++
+					);
+				}
 			}
 			RPCTypeOwnerSchemaWriter->Outdent().Print("}");
 		}
@@ -303,25 +323,28 @@ int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* C
 		{
 			if (Group == ERPCType::RPC_NetMulticast)
 			{
-				checkf(RPC->bReliable == false, TEXT("%s: Unreal GDK currently does not support Reliable Multicast RPCs"), *RPC->Function->GetName());
+				bool bIsReliableRPC = (RPC.Key->FunctionFlags & FUNC_NetReliable) != 0;
+				checkf(bIsReliableRPC == false, TEXT("%s: Unreal GDK currently does not support Reliable Multicast RPCs"), *RPC.Key->GetName());
 
 				Writer.Printf("event %s.%s %s;",
-					*UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName()).ToLower(),
-					*SchemaRPCRequestType(RPC->Function),
-					*SchemaRPCName(Class, RPC->Function));
+					*UnrealNameToSchemaTypeName(*RPC.Key->GetOuter()->GetName()).ToLower(),
+					*SchemaRPCRequestType(RPC.Key),
+					*SchemaRPCName(Class, RPC.Key));
 			}
 			else
 			{
 				Writer.Printf("command UnrealRPCCommandResponse %s(%s.%s);",
-					*SchemaRPCName(Class, RPC->Function),
-					*UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName()).ToLower(),
-					*SchemaRPCRequestType(RPC->Function));
+					*SchemaRPCName(Class, RPC.Key),
+					*UnrealNameToSchemaTypeName(*RPC.Key->GetOuter()->GetName()).ToLower(),
+					*SchemaRPCRequestType(RPC.Key));
 			}
 		}
 		Writer.Outdent().Print("}");
+		Writer.PrintNewLine();
 	}
 
 	return IdGenerator.GetNumUsedIds();
+	return 0;
 }
 
 int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "EngineMinimal.h"
+#include "RepLayout.h"
 #include "Net/RepLayout.h"
 
 /*
@@ -129,7 +130,7 @@ struct FUnrealReplicationDataWrapper
 	FRepLayout ReplicatedPropertyData;
 	FRepLayout MigratablePropertyData;
 
-	TMap<UFunction*, FRepLayout> RPCs;
+	TMap<UFunction*, FRepLayout*> RPCs;
 };
 
 // A node which represents an RPC.
@@ -161,7 +162,10 @@ struct FUnrealMigratableData
 
 using FUnrealFlatRepData = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPtr<FUnrealProperty>>>;
 using FUnrealFlatRepDataNew = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPtr<FUnrealProperty>>>;
+
 using FUnrealRPCsByType = TMap<ERPCType, TArray<TSharedPtr<FUnrealRPC>>>;
+using FUnrealRPCsByTypeNew = TMap<ERPCType, TArray<TPair<UFunction*, FRepLayout*>>>;
+
 using FCmdHandlePropertyMap = TMap<uint16, TSharedPtr<FUnrealProperty>>;
 
 // Given a UClass, returns either "AFoo" or "UFoo" depending on whether Foo is a subclass of actor.
@@ -202,6 +206,9 @@ void VisitAllProperties(TSharedPtr<FUnrealRPC> RPCNode, TFunction<bool(TSharedPt
 // Generates a unique checksum for the Property that allows matching to Unreal's RepLayout Cmds.
 uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 StaticArrayIndex);
 
+// Creates a new FUnrealProperty for the included UProperty, generates a checksum for it and then adds it to the TypeNode included.
+TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNode, UProperty* Property, uint32 ParentChecksum, uint32 StaticArrayIndex);
+
 TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class);
 
 // Generates an AST from an Unreal UStruct or UClass.
@@ -231,6 +238,8 @@ FCmdHandlePropertyMap GetFlatMigratableData(TSharedPtr<FUnrealType> TypeInfo);
 //
 // This function will traverse into subobject properties.
 FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo);
+
+FUnrealRPCsByTypeNew GetAllRPCsByTypeNew(TMap<UFunction*, FRepLayout*> RPCs);
 
 // Given an AST, traverses all its parameters (and properties within structs) and generates a complete flattened list of properties.
 TArray<TSharedPtr<FUnrealProperty>> GetFlatRPCParameters(TSharedPtr<FUnrealRPC> RPCNode);

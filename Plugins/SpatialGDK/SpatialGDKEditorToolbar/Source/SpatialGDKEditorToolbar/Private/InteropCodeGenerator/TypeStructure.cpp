@@ -1,6 +1,8 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+#pragma optimize("", off)
 
 #include "TypeStructure.h"
+#include "Net/RepLayout.h"
 #include "SpatialGDKEditorInteropCodeGenerator.h"
 
 FString GetFullCPPName(UClass* Class)
@@ -150,12 +152,29 @@ uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 Static
 	return Checksum;
 }
 
+TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNode, UProperty* Property, uint32 ParentChecksum, uint32 StaticArrayIndex)
+{
+	TSharedPtr<FUnrealProperty> PropertyNode = MakeShared<FUnrealProperty>();
+	PropertyNode->Property = Property;
+	PropertyNode->ContainerType = TypeNode;
+	PropertyNode->ParentChecksum = ParentChecksum;
+	PropertyNode->StaticArrayIndex = StaticArrayIndex;
+
+	// Generate a checksum for this PropertyNode to be used to match properties with the RepLayout Cmds later.
+	PropertyNode->CompatibleChecksum = GenerateChecksum(Property, ParentChecksum, StaticArrayIndex);
+	TypeNode->Properties.Add(Property, PropertyNode);
+	return PropertyNode;
+}
+
 TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class)
 {
 	TSharedPtr<FUnrealReplicationDataWrapper> RepDataWrapper = MakeShared<FUnrealReplicationDataWrapper>();
 
 	RepDataWrapper->ReplicatedPropertyData.InitFromObjectClass(Class);
-	RepDataWrapper->MigratablePropertyData.InitMigratablePropertiesFromObjectClass(Class);
+	// RepDataWrapper->MigratablePropertyData.InitMigratablePropertiesFromObjectClass(Class); // This will remain deprecated until we can handle migratable properties in non-replicated components.
+
+	// PLAN OF ACTION
+	// What we need to do is generate type-info for the entire class and then pull out the migratable properties.
 
 	// Iterate through each RPC in the class.
 	for (TFieldIterator<UFunction> RemoteFunction(Class); RemoteFunction; ++RemoteFunction)
@@ -164,8 +183,8 @@ TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class)
 			RemoteFunction->FunctionFlags & FUNC_NetServer ||
 			RemoteFunction->FunctionFlags & FUNC_NetMulticast)
 		{
-			FRepLayout RPCData;
-			RPCData.InitFromFunction(*RemoteFunction);
+			FRepLayout* RPCData = new FRepLayout();
+			RPCData->InitFromFunction(*RemoteFunction);
 			RepDataWrapper->RPCs.Add(*RemoteFunction, RPCData);
 		}
 	}
@@ -245,6 +264,8 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 		//		during runtime. This is determined by getting the CDO of this class to determine what is stored in that property.
 		UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property);
 		check(ObjectProperty);
+
+		bool bIsComponent = ObjectProperty->IsA<UActorComponent>();
 
 		// If this is a property of a struct, assume it's a weak reference.
 		if (!Class)
@@ -561,6 +582,24 @@ FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo)
 		}
 		return true;
 	}, true);
+	return RPCsByType;
+}
+
+// TODO: Rethink how we store these RPCs
+FUnrealRPCsByTypeNew GetAllRPCsByTypeNew(TMap<UFunction*, FRepLayout*> RPCs)
+{
+	FUnrealRPCsByTypeNew RPCsByType;
+	RPCsByType.Add(RPC_Client);
+	RPCsByType.Add(RPC_Server);
+	RPCsByType.Add(RPC_NetMulticast);
+
+	for (auto& RPC : RPCs)
+	{
+		auto RPCType = GetRPCTypeFromFunction(RPC.Key);
+
+		TPair<UFunction*, FRepLayout*> NewRPC{ RPC.Key, RPC.Value };
+		RPCsByType.FindOrAdd(RPCType).Add(NewRPC);
+	}
 	return RPCsByType;
 }
 
