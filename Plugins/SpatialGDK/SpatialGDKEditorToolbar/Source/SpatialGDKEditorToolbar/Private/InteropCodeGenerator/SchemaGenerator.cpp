@@ -84,13 +84,9 @@ FString PropertyToSchemaType(UProperty* Property, bool bIsRPCProperty)
 	{
 		DataType = TEXT("uint64");
 	}
-	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()))
+	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()) || Property->IsA(UTextProperty::StaticClass()))
 	{
 		DataType = TEXT("string");
-	}
-	else if (Property->IsA(UClassProperty::StaticClass()))
-	{
-		DataType = TEXT("uint32");	// Note: We hash the static class path names to UClass objects.
 	}
 	else if (Property->IsA(UObjectPropertyBase::StaticClass()))
 	{

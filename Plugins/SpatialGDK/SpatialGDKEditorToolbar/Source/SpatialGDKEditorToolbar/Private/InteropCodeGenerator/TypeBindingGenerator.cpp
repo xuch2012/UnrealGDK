@@ -240,10 +240,6 @@ void GenerateUnrealToSchemaConversion(FCodeWriter& Writer, const FString& Update
 	{
 		Writer.Printf("%s(uint64_t(%s));", *Update, *PropertyValue);
 	}
-	else if (Property->IsA(UClassProperty::StaticClass()))
-	{
-		Writer.Printf("%s(PackageMap->GetHashFromStaticClass(%s));", *Update, *PropertyValue);
-	}
 	else if (Property->IsA(UObjectPropertyBase::StaticClass()))
 	{
 		Writer.Printf("if (%s != nullptr)", *PropertyValue);
@@ -281,6 +277,10 @@ void GenerateUnrealToSchemaConversion(FCodeWriter& Writer, const FString& Update
 	else if (Property->IsA(UStrProperty::StaticClass()))
 	{
 		Writer.Printf("%s(TCHAR_TO_UTF8(*%s));", *Update, *PropertyValue);
+	}
+	else if (Property->IsA(UTextProperty::StaticClass()))
+	{
+		Writer.Printf("%s(TCHAR_TO_UTF8(*%s.ToString()));", *Update, *PropertyValue);
 	}
 	else if (Property->IsA(UArrayProperty::StaticClass()))
 	{
@@ -401,10 +401,6 @@ void GeneratePropertyToUnrealConversion(FCodeWriter& Writer, const FString& Upda
 	{
 		Writer.Printf("%s = %s;", *PropertyValue, *Update);
 	}
-	else if (Property->IsA(UClassProperty::StaticClass()))
-	{
-		Writer.Printf("%s = PackageMap->GetStaticClassFromHash(%s);", *PropertyValue, *Update);
-	}
 	else if (Property->IsA(UObjectPropertyBase::StaticClass()))
 	{
 		Writer.Printf(R"""(
@@ -438,6 +434,10 @@ void GeneratePropertyToUnrealConversion(FCodeWriter& Writer, const FString& Upda
 	else if (Property->IsA(UStrProperty::StaticClass()))
 	{
 		Writer.Printf("%s = FString(UTF8_TO_TCHAR(%s.c_str()));", *PropertyValue, *Update);
+	}
+	else if (Property->IsA(UTextProperty::StaticClass()))
+	{
+		Writer.Printf("%s = FText::FromString((%s).data());", *PropertyValue, *Update);
 	}
 	else if (Property->IsA(UArrayProperty::StaticClass())) {
 		const UArrayProperty* ArrayProperty = Cast<UArrayProperty>(Property);
@@ -1439,11 +1439,6 @@ void GenerateBody_SendUpdate_RepDataProperty(FCodeWriter& SourceWriter, uint16 H
 		// Structs may have UObject* inside which could be unresolved
 		bHandleUnresolvedObjects = true;
 	}
-	else if (Property->IsA<UClassProperty>())
-	{
-		// This is the same as the default case, but as UClassProperty extends from UObjectPropertyBase, we need to catch them here.
-		SourceWriter.Printf("%s %s = *(reinterpret_cast<%s const*>(Data));", *PropertyValueCppType, *PropertyValueName, *PropertyValueCppType);
-	}
 	else if (Property->IsA<UWeakObjectProperty>())
 	{
 		FString ClassName = GetNativeClassName(Cast<UObjectPropertyBase>(Property));
@@ -1656,11 +1651,6 @@ void GenerateBody_ReceiveUpdate_RepDataProperty(FCodeWriter& SourceWriter, uint1
 		{
 			bIsArrayOfObjects = true;
 		}
-	}
-	else if (Property->IsA<UClassProperty>())
-	{
-		// This is the same as the default case, but as UClassProperty extends from UObjectPropertyBase, we need to catch them here.
-		SourceWriter.Printf("%s %s = *(reinterpret_cast<%s const*>(PropertyData));", *PropertyValueCppType, *PropertyValueName, *PropertyValueCppType);
 	}
 	else if (Property->IsA<UWeakObjectProperty>())
 	{
@@ -1942,7 +1932,7 @@ void GenerateFunction_SendRPC(FCodeWriter& SourceWriter, UClass* Class, const TS
 			SourceWriter.Printf("UE_LOG(LogSpatialOSInterop, Log, TEXT(\"%%s: RPC %s queued. %s is unresolved.\"), *Interop->GetSpatialOS()->GetWorkerId());",
 				*RPC->Function->GetName(),
 				*PropertyValue);
-			SourceWriter.Printf("return {%s};", *PropertyValue);
+			SourceWriter.Printf("return {Cast<UObject>(%s)};", *PropertyValue);
 		}, true, false);
 		SourceWriter.End();
 	}
