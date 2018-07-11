@@ -151,99 +151,48 @@ int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* C
 
 		import "improbable/unreal/gdk/core_types.schema";)""", *UnrealNameToSchemaTypeName(Class->GetName().ToLower()));
 
-	int SingleClientRepDataFieldCounter = 2;
-	int MultiClientRepDataFieldCounter = 2;
+	FGroupedRepCmds GroupedRepCmds = GetGroupedRepCmds(&ReplicationData->ReplicatedPropertyData);
 
-	// Build Single and Multi client replication data fields.
-	for (int i = 0; i < ReplicationData->ReplicatedPropertyData.Cmds.Num(); ++i)
+	// Client-server replicated properties.
+	for (EReplicatedPropertyGroup Group : GetAllReplicatedPropertyGroups())
 	{
-		if (ReplicationData->ReplicatedPropertyData.Cmds[i].Property) // We want to ignore return commands which have null properties.
+		Writer.Printf("component %s {", *SchemaReplicatedDataName(Group, Class));
+		Writer.Indent();
+		Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
+		int FieldCounter = 0;
+		for (auto& RepProp : GroupedRepCmds[Group])
 		{
-			FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
-			FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
+			FieldCounter++;
 
-			FString NewSchemaField;
-
-			switch (Parent.Condition)
-			{
-			case COND_AutonomousOnly:
-			case COND_OwnerOnly:
-				NewSchemaField = FString::Printf(TEXT("%s %s = %d;"),
-					*PropertyToSchemaType(Cmd.Property, false),
-					*SchemaFieldName(Cmd, Parent),
-					SingleClientRepDataFieldCounter++
-				);
-
-				Writer.AddSingleClientRepDataField(NewSchemaField);
-			default:
-				NewSchemaField = FString::Printf(TEXT("%s %s = %d;"),
-					*PropertyToSchemaType(Cmd.Property, false),
-					*SchemaFieldName(Cmd, Parent),
-					MultiClientRepDataFieldCounter++
-				);
-				Writer.AddMultiClientRepDataField(NewSchemaField);
-			}
-		}
-	}
-
-	int MigratableDataFieldCounter = 2;
-	// Build migratable data fields
-	for (int i = 0; i < ReplicationData->MigratablePropertyData.Cmds.Num(); i++)
-	{
-		if (ReplicationData->MigratablePropertyData.Cmds[i].Property)
-		{
-			FRepLayoutCmd Cmd = ReplicationData->ReplicatedPropertyData.Cmds[i];
-			FRepParentCmd Parent = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
-
-			FString NewSchemaField;
-			NewSchemaField = FString::Printf(TEXT("%s %s = %d;"),
-				*PropertyToSchemaType(Cmd.Property, false),
-				*SchemaFieldName(Cmd, Parent),
-				MigratableDataFieldCounter++
+			FRepLayoutCmd Cmd = RepProp.Value;
+			FRepParentCmd ParentCmd = ReplicationData->ReplicatedPropertyData.Parents[Cmd.ParentIndex];
+			Writer.Printf("%s %s = %d;",
+				*PropertyToSchemaType(RepProp.Value.Property, false),
+				*SchemaFieldName(Cmd, ParentCmd),
+				FieldCounter
 			);
-
-			Writer.AddServerRPCRepDataField(NewSchemaField);
 		}
+		Writer.Outdent().Print("}");
 	}
 
-	// Print the replicated schema fields before the RPCs
-	// Print the SingleClientRepData
-	Writer.PrintNewLine();
-	Writer.Printf("component %s {", *SchemaReplicatedDataName(REP_SingleClient, Class));
-	Writer.Indent();
-	Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
-	for (FString SchemaField : Writer.SingleClientRepData)
-	{
-		Writer.Printf(SchemaField);
-	}
-	Writer.Outdent().Print("}");
-	Writer.PrintNewLine();
-
-	// Print the MultiClientRepData
-	Writer.Printf("component %s {", *SchemaReplicatedDataName(REP_MultiClient, Class));
-	Writer.Indent();
-	Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
-	for (FString SchemaField : Writer.MultiClientRepData)
-	{
-		Writer.Printf(SchemaField);
-	}
-	Writer.Outdent().Print("}");
-	Writer.PrintNewLine();
-
-	// Print the MigratableRepData
+	// Worker-worker replicated properties.
 	Writer.Printf("component %s {", *SchemaMigratableDataName(Class));
 	Writer.Indent();
 	Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
-	for (FString SchemaField : Writer.ServerRPCRepData)
+	int FieldCounter = 0;
+	for (auto& Prop : ReplicationData->MigratableData)
 	{
-		Writer.Printf(SchemaField);
+		FieldCounter++;
+		WriteSchemaMigratableField(Writer,
+			Prop.Value,
+			FieldCounter);
 	}
 	Writer.Outdent().Print("}");
 
 	// Build RPCs
 	// We create a new code writer for each RPC owner class. These become ClassName_Types.schema
 	TArray<FString> RPCTypeOwners;
-	for(auto& RPCFunction : ReplicationData->RPCs)
+	for(auto& RPCFunction : ReplicationData->RPCPropertyDataMap)
 	{
 		RPCTypeOwners.AddUnique(UnrealNameToSchemaTypeName(RPCFunction.Key->GetOuter()->GetName()));
 	}
@@ -266,7 +215,7 @@ int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* C
 	}
 	Writer.PrintNewLine();
 
-	FUnrealRPCsByTypeNew RPCsByType = GetAllRPCsByTypeNew(ReplicationData->RPCs);
+	FUnrealRPCsByTypeNew RPCsByType = GetAllRPCsByTypeNew(ReplicationData->RPCPropertyDataMap);
 	for (auto Group : GetRPCTypes())
 	{
 		auto thing = RPCsByType[Group];
@@ -344,7 +293,6 @@ int GenerateTypeBindingSchemaNew(FCodeWriter& Writer, int ComponentId, UClass* C
 	}
 
 	return IdGenerator.GetNumUsedIds();
-	return 0;
 }
 
 int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)

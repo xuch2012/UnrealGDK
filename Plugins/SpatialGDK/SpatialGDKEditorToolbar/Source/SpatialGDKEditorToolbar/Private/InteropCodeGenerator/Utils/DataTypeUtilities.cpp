@@ -90,8 +90,9 @@ FString SchemaFieldName(const FRepLayoutCmd Cmd, const FRepParentCmd Parent)
 {
 	// Prefix is required to disambiguate between properties in the generated code and UActorComponent/UObject properties
 	// which the generated code extends :troll:.
-	// TODO: Make this easier to read.
+
+	// SchemaFieldName takes the form of field_VariableName_ArrayIndex_Checksum
 	FString ChecksumString = FString::Printf(TEXT("_%u"), Cmd.CompatibleChecksum);
-	FString FieldName = TEXT("field_") + UnrealNameToSchemaTypeName(Parent.Property->GetName().ToLower()) + FString::FromInt(Parent.ArrayIndex) + "_" + UnrealNameToSchemaTypeName(Cmd.Property->GetName().ToLower()) + ChecksumString;
+	FString FieldName = TEXT("field_") + UnrealNameToSchemaTypeName(Cmd.Property->GetName().ToLower()) + "_" + FString::FromInt(Parent.ArrayIndex) + ChecksumString;
 	return FieldName;
 }

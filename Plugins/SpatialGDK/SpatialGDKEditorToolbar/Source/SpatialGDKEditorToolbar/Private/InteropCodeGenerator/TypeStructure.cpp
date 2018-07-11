@@ -166,15 +166,15 @@ TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNod
 	return PropertyNode;
 }
 
-TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class)
+TSharedPtr<FUnrealReplicationDataWrapper> BuildUnrealReplicationDataWrapper(UClass* Class)
 {
 	TSharedPtr<FUnrealReplicationDataWrapper> RepDataWrapper = MakeShared<FUnrealReplicationDataWrapper>();
 
 	RepDataWrapper->ReplicatedPropertyData.InitFromObjectClass(Class);
-	// RepDataWrapper->MigratablePropertyData.InitMigratablePropertiesFromObjectClass(Class); // This will remain deprecated until we can handle migratable properties in non-replicated components.
+	// RepDataWrapper->MigratablePropertyData.InitMigratablePropertiesFromObjectClass(Class); // This will remain deprecated until we can handle migratable properties in non-replicated components. UNR-
 
-	// PLAN OF ACTION
-	// What we need to do is generate type-info for the entire class and then pull out the migratable properties.
+	TSharedPtr<FUnrealType> UnrealPropertyWrapper = BuildUnrealPropertyWrapper(Class, 0, 0);
+	RepDataWrapper->MigratableData = GetFlatMigratableData(UnrealPropertyWrapper);
 
 	// Iterate through each RPC in the class.
 	for (TFieldIterator<UFunction> RemoteFunction(Class); RemoteFunction; ++RemoteFunction)
@@ -185,14 +185,14 @@ TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class)
 		{
 			FRepLayout* RPCData = new FRepLayout();
 			RPCData->InitFromFunction(*RemoteFunction);
-			RepDataWrapper->RPCs.Add(*RemoteFunction, RPCData);
+			RepDataWrapper->RPCPropertyDataMap.Add(*RemoteFunction, RPCData);
 		}
 	}
 
 	return RepDataWrapper;
 }
 
-TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksum, int32 StaticArrayIndex, bool bIsRPC)
+TSharedPtr<FUnrealType> BuildUnrealPropertyWrapper(UStruct* Type, uint32 ParentChecksum, int32 StaticArrayIndex)
 {
 	// Struct types will set this to nullptr.
 	UClass* Class = Cast<UClass>(Type);
@@ -212,15 +212,9 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 		// If this property not a struct or object (which can contain more properties), stop here.
 		if (!Property->IsA<UStructProperty>() && !Property->IsA<UObjectProperty>())
 		{
-			// We check for bIsRPC at this step as we do not want to generate new PropertyNodes for c-style array members in RPCs.
-			// RPCs use a different system where the members of the c-style array are added to a dynamic list.
-			// This check is made before all handling of c-style arrays in this method.
-			if (!bIsRPC)
+			for (int i = 1; i < Property->ArrayDim; i++)
 			{
-				for (int i = 1; i < Property->ArrayDim; i++)
-				{
-					CreateUnrealProperty(TypeNode, Property, ParentChecksum, i);
-				}
+				CreateUnrealProperty(TypeNode, Property, ParentChecksum, i);
 			}
 			continue;
 		}
@@ -232,22 +226,19 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 
 			// This is the property for the 0th struct array member.
 			uint32 ParentPropertyNodeChecksum = PropertyNode->CompatibleChecksum;
-			PropertyNode->Type = CreateUnrealTypeInfo(StructProperty->Struct, ParentPropertyNodeChecksum, 0, bIsRPC);
+			PropertyNode->Type = BuildUnrealPropertyWrapper(StructProperty->Struct, ParentPropertyNodeChecksum, 0);
 			PropertyNode->Type->ParentProperty = PropertyNode;
 
-			if (!bIsRPC)
+			// For static arrays we need to make a new struct array member node.
+			for (int i = 1; i < Property->ArrayDim; i++)
 			{
-				// For static arrays we need to make a new struct array member node.
-				for (int i = 1; i < Property->ArrayDim; i++)
-				{
-					// Create a new PropertyNode.
-					TSharedPtr<FUnrealProperty> StaticStructArrayPropertyNode = CreateUnrealProperty(TypeNode, Property, ParentChecksum, i);
+				// Create a new PropertyNode.
+				TSharedPtr<FUnrealProperty> StaticStructArrayPropertyNode = CreateUnrealProperty(TypeNode, Property, ParentChecksum, i);
 
-					// Generate Type information on the inner struct.
-					// Note: The parent checksum of the properties within a struct that is a member of a static struct array, is the checksum for the struct itself after index modification.
-					StaticStructArrayPropertyNode->Type = CreateUnrealTypeInfo(StructProperty->Struct, StaticStructArrayPropertyNode->CompatibleChecksum, 0, bIsRPC);
-					StaticStructArrayPropertyNode->Type->ParentProperty = StaticStructArrayPropertyNode;
-				}
+				// Generate Type information on the inner struct.
+				// Note: The parent checksum of the properties within a struct that is a member of a static struct array, is the checksum for the struct itself after index modification.
+				StaticStructArrayPropertyNode->Type = BuildUnrealPropertyWrapper(StructProperty->Struct, StaticStructArrayPropertyNode->CompatibleChecksum, 0);
+				StaticStructArrayPropertyNode->Type->ParentProperty = StaticStructArrayPropertyNode;
 			}
 			continue;
 		}
@@ -297,21 +288,19 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 				UE_LOG(LogSpatialGDKInteropCodeGenerator, Warning, TEXT("Property Class: %s Instance Class: %s"), *ObjectProperty->PropertyClass->GetName(), *Value->GetClass()->GetName());
 
 				// This property is definitely a strong reference, recurse into it.
-				PropertyNode->Type = CreateUnrealTypeInfo(ObjectProperty->PropertyClass, ParentChecksum, 0, bIsRPC);
+				PropertyNode->Type = BuildUnrealPropertyWrapper(ObjectProperty->PropertyClass, ParentChecksum, 0);
 				PropertyNode->Type->ParentProperty = PropertyNode;
 
-				if (!bIsRPC)
+				// For static arrays we need to make a new object array member node.
+				for (int i = 1; i < Property->ArrayDim; i++)
 				{
-					// For static arrays we need to make a new object array member node.
-					for (int i = 1; i < Property->ArrayDim; i++)
-					{
-						TSharedPtr<FUnrealProperty> StaticObjectArrayPropertyNode = CreateUnrealProperty(TypeNode, Property, ParentChecksum, i);
+					TSharedPtr<FUnrealProperty> StaticObjectArrayPropertyNode = CreateUnrealProperty(TypeNode, Property, ParentChecksum, i);
 
-						// Note: The parent checksum of static arrays of strong object references will be the parent checksum of this class.
-						StaticObjectArrayPropertyNode->Type = CreateUnrealTypeInfo(ObjectProperty->PropertyClass, ParentChecksum, 0, bIsRPC);
-						StaticObjectArrayPropertyNode->Type->ParentProperty = StaticObjectArrayPropertyNode;
-					}
+					// Note: The parent checksum of static arrays of strong object references will be the parent checksum of this class.
+					StaticObjectArrayPropertyNode->Type = BuildUnrealPropertyWrapper(ObjectProperty->PropertyClass, ParentChecksum, 0);
+					StaticObjectArrayPropertyNode->Type->ParentProperty = StaticObjectArrayPropertyNode;
 				}
+				
 				bHandleStaticArrayProperties = false;
 			}
 			else
@@ -327,7 +316,7 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 		}
 
 		// Weak reference static arrays are handled as a single UObjectRef per static array member.
-		if (!bIsRPC && bHandleStaticArrayProperties)
+		if (bHandleStaticArrayProperties)
 		{
 			for (int i = 1; i < Property->ArrayDim; i++)
 			{
@@ -341,145 +330,6 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 	{
 		return TypeNode;
 	}
-
-	// Iterate through each RPC in the class.
-	for (TFieldIterator<UFunction> RemoteFunction(Class); RemoteFunction; ++RemoteFunction)
-	{
-		if (RemoteFunction->FunctionFlags & FUNC_NetClient ||
-			RemoteFunction->FunctionFlags & FUNC_NetServer ||
-			RemoteFunction->FunctionFlags & FUNC_NetMulticast)
-		{
-			TSharedPtr<FUnrealRPC> RPCNode = MakeShared<FUnrealRPC>();
-			RPCNode->CallerType = Class;
-			RPCNode->Function = *RemoteFunction;
-			RPCNode->Type = GetRPCTypeFromFunction(*RemoteFunction);
-			RPCNode->bReliable = (RemoteFunction->FunctionFlags & FUNC_NetReliable) != 0;
-			TypeNode->RPCs.Add(*RemoteFunction, RPCNode);
-
-			// Fill out parameters.
-			for (TFieldIterator<UProperty> It(*RemoteFunction); It; ++It)
-			{
-				UProperty* Parameter = *It;
-
-				TSharedPtr<FUnrealProperty> PropertyNode = MakeShared<FUnrealProperty>();
-				PropertyNode->Property = Parameter;
-
-				// RPCs can't have static arrays as parameters so we don't have to special case for them here, however struct parameters can have static arrays in them.
-				RPCNode->Parameters.Add(Parameter, PropertyNode);
-
-				// If this RPC parameter is a struct, recurse into it.
-				UStructProperty* StructParameter = Cast<UStructProperty>(Parameter);
-				if (StructParameter)
-				{
-					uint32 StructChecksum = GenerateChecksum(Parameter, ParentChecksum, 0);
-					PropertyNode->CompatibleChecksum = StructChecksum;
-					PropertyNode->Type = CreateUnrealTypeInfo(StructParameter->Struct, StructChecksum, 0 , true);
-					PropertyNode->Type->ParentProperty = PropertyNode;
-				}
-			}
-		}
-	}
-
-	// Set up replicated properties by reading the rep layout and matching the properties with the ones in the type node.
-	// Based on inspection in InitFromObjectClass, the RepLayout will always replicate object properties using NetGUIDs, regardless of
-	// ownership. However, the rep layout will recurse into structs and allocate rep handles for their properties, unless the condition
-	// "Struct->StructFlags & STRUCT_NetSerializeNative" is true. In this case, the entire struct is replicated as a whole.
-	FRepLayout RepLayout;
-	RepLayout.InitFromObjectClass(Class);
-	for (int CmdIndex = 0; CmdIndex < RepLayout.Cmds.Num(); ++CmdIndex)
-	{
-		FRepLayoutCmd& Cmd = RepLayout.Cmds[CmdIndex];
-		FRepParentCmd& Parent = RepLayout.Parents[Cmd.ParentIndex];
-
-		if (Cmd.Type == REPCMD_Return || Cmd.Property == nullptr)
-		{
-			continue;
-		}
-
-		// In a FRepLayout, all the root level replicated properties in a class are stored in the Parents array.
-		// The Cmds array is an expanded version of the Parents array. This usually maps 1:1 with the Parents array (as most properties
-		// don't contain other properties). The main exception are structs which don't have a native serialize function. In this case
-		// multiple Cmds map to the structs properties, but they all have the same ParentIndex (which points to the root replicated property
-		// which contains them.
-		//
-		// This might be problematic if we have a property which is inside a struct, nested in another struct which is replicated. For example:
-		//
-		//	class Foo
-		//	{
-		//		struct Bar
-		//		{
-		// 			struct Baz
-		// 			{
-		// 				int Nested;
-		// 			} Baz;
-		// 		} Bar;
-		//	}
-		//
-		// The parents array will contain "Bar", and the cmds array will contain "Nested", but we have no reference to "Baz" anywhere in the RepLayout.
-		// What we do here is recurse into all of Bar's properties in the AST until we find Baz.
-
-		TSharedPtr<FUnrealProperty> PropertyNode = nullptr;
-
-		// Simple case: Cmd is a root property in the object.
-		if (Parent.Property == Cmd.Property)
-		{
-			// Make sure we have the correct property via the checksums.
-			for (auto& PropertyPair : TypeNode->Properties)
-			{
-				if(PropertyPair.Value->CompatibleChecksum == Cmd.CompatibleChecksum)
-				{
-					PropertyNode = PropertyPair.Value;
-				}
-			}
-		}
-		else
-		{
-			// It's possible to have duplicate parent properties (they are distinguished by ArrayIndex), so we make sure to look at them all.
-			TArray<TSharedPtr<FUnrealProperty>> RootProperties;
-			TypeNode->Properties.MultiFind(Parent.Property, RootProperties);
-
-			for(int i = 0; i < RootProperties.Num(); i++)
-			{
-				TSharedPtr<FUnrealProperty> RootProperty = RootProperties[i];
-
-				checkf(RootProperty->Type.IsValid(), TEXT("Properties in the AST which are parent properties in the rep layout must have child properties"));
-				VisitAllProperties(RootProperty->Type, [&PropertyNode, &Cmd](TSharedPtr<FUnrealProperty> Property)
-				{
-					if (Property->CompatibleChecksum == Cmd.CompatibleChecksum)
-					{
-						checkf(!PropertyNode.IsValid(), TEXT("We've already found a previous property node with the same property. This indicates that we have a 'diamond of death' style situation."))
-						PropertyNode = Property;
-					}
-					return true;
-				}, false);
-			}
-		}
-		checkf(PropertyNode.IsValid(), TEXT("Couldn't find the Cmd property inside the Parent's sub-properties. This shouldn't happen."));
-
-		// We now have the right property node. Fill in the rep data.
-		TSharedPtr<FUnrealRepData> RepDataNode = MakeShared<FUnrealRepData>();
-		RepDataNode->RepLayoutType = (ERepLayoutCmdType)Cmd.Type;
-		RepDataNode->Condition = Parent.Condition;
-		RepDataNode->RepNotifyCondition = Parent.RepNotifyCondition;
-		RepDataNode->ArrayIndex = PropertyNode->StaticArrayIndex;
-		if (Parent.RoleSwapIndex != -1)
-		{
-			const int32 SwappedCmdIndex = RepLayout.Parents[Parent.RoleSwapIndex].CmdStart;
-			RepDataNode->RoleSwapHandle = static_cast<int32>(RepLayout.Cmds[SwappedCmdIndex].RelativeHandle);
-		}
-		else
-		{
-			RepDataNode->RoleSwapHandle = -1;
-		}
-		PropertyNode->ReplicationData = RepDataNode;
-		PropertyNode->ReplicationData->Handle = Cmd.RelativeHandle;
-
-		if (Cmd.Type == REPCMD_DynamicArray)
-		{
-			// Bypass the inner properties and null terminator cmd when processing dynamic arrays.
-			CmdIndex = Cmd.EndCmd - 1;
-		}
-	} // END CMD FOR LOOP
 
 	// Find the handover properties.
 	uint16 MigratableDataHandle = 1;
@@ -529,6 +379,44 @@ FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo)
 		return A < B;
 	});
 	return RepData;
+}
+
+FGroupedRepCmds GetGroupedRepCmds(FRepLayout* RepLayout)
+{
+	FGroupedRepCmds FlatRepData;
+	FlatRepData.Add(REP_MultiClient);
+	FlatRepData.Add(REP_SingleClient);
+
+	for(int i = 0; i < RepLayout->Cmds.Num(); i++)
+	{
+		FRepLayoutCmd Cmd = RepLayout->Cmds[i];
+		FRepParentCmd ParentCmd = RepLayout->Parents[Cmd.ParentIndex];
+
+		if(Cmd.Property)
+		{
+			EReplicatedPropertyGroup Group = REP_MultiClient;
+			switch (ParentCmd.Condition)
+			{
+			case COND_AutonomousOnly:
+			case COND_OwnerOnly:
+				Group = REP_SingleClient;
+				break;
+			}
+			FlatRepData[Group].Add(Cmd.RelativeHandle, Cmd);
+		}
+	}
+
+	// Sort by replication handle.
+	FlatRepData[REP_MultiClient].KeySort([](uint16 A, uint16 B)
+	{
+		return A < B;
+	});
+	FlatRepData[REP_SingleClient].KeySort([](uint16 A, uint16 B)
+	{
+		return A < B;
+	});
+
+	return FlatRepData;
 }
 
 FCmdHandlePropertyMap GetFlatMigratableData(TSharedPtr<FUnrealType> TypeInfo)
@@ -585,7 +473,6 @@ FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo)
 	return RPCsByType;
 }
 
-// TODO: Rethink how we store these RPCs
 FUnrealRPCsByTypeNew GetAllRPCsByTypeNew(TMap<UFunction*, FRepLayout*> RPCs)
 {
 	FUnrealRPCsByTypeNew RPCsByType;
@@ -596,7 +483,6 @@ FUnrealRPCsByTypeNew GetAllRPCsByTypeNew(TMap<UFunction*, FRepLayout*> RPCs)
 	for (auto& RPC : RPCs)
 	{
 		auto RPCType = GetRPCTypeFromFunction(RPC.Key);
-
 		TPair<UFunction*, FRepLayout*> NewRPC{ RPC.Key, RPC.Value };
 		RPCsByType.FindOrAdd(RPCType).Add(NewRPC);
 	}

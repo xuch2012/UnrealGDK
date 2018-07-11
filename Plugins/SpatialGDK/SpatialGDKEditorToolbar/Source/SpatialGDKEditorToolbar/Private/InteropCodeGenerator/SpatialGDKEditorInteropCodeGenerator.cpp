@@ -30,8 +30,8 @@ int GenerateCompleteSchemaFromClass(const FString& SchemaPath, const FString& Fo
 	FString TypeBindingFilename = FString::Printf(TEXT("SpatialTypeBinding_%s"), *Class->GetName());
 
 	// Parent and static array index start at 0 for checksum calculations.
-	TSharedPtr<FUnrealType> TypeInfo = CreateUnrealTypeInfo(Class, 0, 0, false);
-	TSharedPtr<FUnrealReplicationDataWrapper> ReplicationDataWrapper = CreateUnrealTypeInfoNew(Class);
+	//TSharedPtr<FUnrealType> TypeInfo = BuildUnrealPropertyWrapper(Class, 0, 0);
+	TSharedPtr<FUnrealReplicationDataWrapper> ReplicationDataWrapper = BuildUnrealReplicationDataWrapper(Class);
 
 	// Generate schema.
 	//int NumComponents = GenerateTypeBindingSchema(OutputSchema, ComponentId, Class, TypeInfo, SchemaPath);
@@ -39,10 +39,10 @@ int GenerateCompleteSchemaFromClass(const FString& SchemaPath, const FString& Fo
 	OutputSchema.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *SchemaFilename));
 
 	// Generate forwarding code.
-	//GenerateTypeBindingHeader(OutputHeader, SchemaFilename, TypeBindingFilename, Class, TypeInfo);
-	//GenerateTypeBindingSource(OutputSource, SchemaFilename, TypeBindingFilename, Class, TypeInfo, TypeBindingHeaders);
-	//OutputHeader.WriteToFile(FString::Printf(TEXT("%s%s.h"), *ForwardingCodePath, *TypeBindingFilename));
-	//OutputSource.WriteToFile(FString::Printf(TEXT("%s%s.cpp"), *ForwardingCodePath, *TypeBindingFilename));
+	GenerateTypeBindingHeader(OutputHeader, SchemaFilename, TypeBindingFilename, Class, ReplicationDataWrapper);
+	GenerateTypeBindingSource(OutputSource, SchemaFilename, TypeBindingFilename, Class, ReplicationDataWrapper, TypeBindingHeaders);
+	OutputHeader.WriteToFile(FString::Printf(TEXT("%s%s.h"), *ForwardingCodePath, *TypeBindingFilename));
+	OutputSource.WriteToFile(FString::Printf(TEXT("%s%s.cpp"), *ForwardingCodePath, *TypeBindingFilename));
 
 	return NumComponents;
 }

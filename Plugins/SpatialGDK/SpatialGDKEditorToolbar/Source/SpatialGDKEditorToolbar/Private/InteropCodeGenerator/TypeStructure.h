@@ -99,6 +99,12 @@ struct FUnrealRPC;
 struct FUnrealRepData;
 struct FUnrealMigratableData;
 
+using FUnrealFlatRepData = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPtr<FUnrealProperty>>>;
+using FGroupedRepCmds = TMap<EReplicatedPropertyGroup, TMap<uint16, FRepLayoutCmd>>;
+using FUnrealRPCsByType = TMap<ERPCType, TArray<TSharedPtr<FUnrealRPC>>>;
+using FUnrealRPCsByTypeNew = TMap<ERPCType, TArray<TPair<UFunction*, FRepLayout*>>>;
+using FCmdHandlePropertyMap = TMap<uint16, TSharedPtr<FUnrealProperty>>;
+
 // A node which represents an unreal type, such as ACharacter or UCharacterMovementComponent.
 struct FUnrealType
 {
@@ -128,9 +134,8 @@ struct FUnrealProperty
 struct FUnrealReplicationDataWrapper
 {
 	FRepLayout ReplicatedPropertyData;
-	FRepLayout MigratablePropertyData;
-
-	TMap<UFunction*, FRepLayout*> RPCs;
+	FCmdHandlePropertyMap MigratableData;
+	TMap<UFunction*, FRepLayout*> RPCPropertyDataMap;
 };
 
 // A node which represents an RPC.
@@ -159,14 +164,6 @@ struct FUnrealMigratableData
 {
 	uint16 Handle;
 };
-
-using FUnrealFlatRepData = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPtr<FUnrealProperty>>>;
-using FUnrealFlatRepDataNew = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPtr<FUnrealProperty>>>;
-
-using FUnrealRPCsByType = TMap<ERPCType, TArray<TSharedPtr<FUnrealRPC>>>;
-using FUnrealRPCsByTypeNew = TMap<ERPCType, TArray<TPair<UFunction*, FRepLayout*>>>;
-
-using FCmdHandlePropertyMap = TMap<uint16, TSharedPtr<FUnrealProperty>>;
 
 // Given a UClass, returns either "AFoo" or "UFoo" depending on whether Foo is a subclass of actor.
 FString GetFullCPPName(UClass* Class);
@@ -209,7 +206,7 @@ uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 Static
 // Creates a new FUnrealProperty for the included UProperty, generates a checksum for it and then adds it to the TypeNode included.
 TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNode, UProperty* Property, uint32 ParentChecksum, uint32 StaticArrayIndex);
 
-TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class);
+TSharedPtr<FUnrealReplicationDataWrapper> BuildUnrealReplicationDataWrapper(UClass* Class);
 
 // Generates an AST from an Unreal UStruct or UClass.
 // At the moment, this function receives a manual list of migratable property chains in this form:
@@ -218,7 +215,7 @@ TSharedPtr<FUnrealReplicationDataWrapper> CreateUnrealTypeInfoNew(UClass* Class)
 //	   {"OtherProperty", "PropertyWithinOtherProperty"}
 //   }
 // In the future, we can get this information directly from the UStruct*.
-TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksum, int32 StaticArrayIndex, bool bIsRPC);
+TSharedPtr<FUnrealType> BuildUnrealPropertyWrapper(UStruct* Type, uint32 ParentChecksum, int32 StaticArrayIndex);
 
 // Traverses an AST, and generates a flattened list of replicated properties, which will match the Cmds array of FRepLayout.
 // The list of replicated properties will all have the ReplicatedData field set to a valid FUnrealRepData node which contains
@@ -226,6 +223,8 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 //
 // This function will _not_ traverse into subobject properties (as the replication system deals with each object separately).
 FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo);
+
+FGroupedRepCmds GetGroupedRepCmds(FRepLayout* RepLayout);
 
 // Traverses an AST, and generates a flattened list of migratable properties. The list of migratable properties will all have
 // the MigratableData field set to a value FUnrealMigratableData node which contains data such as the handle or replication type.
