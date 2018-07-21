@@ -84,13 +84,9 @@ FString PropertyToSchemaType(UProperty* Property, bool bIsRPCProperty)
 	{
 		DataType = TEXT("uint64");
 	}
-	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()))
+	else if (Property->IsA(UNameProperty::StaticClass()) || Property->IsA(UStrProperty::StaticClass()) || Property->IsA(UTextProperty::StaticClass()))
 	{
 		DataType = TEXT("string");
-	}
-	else if (Property->IsA(UClassProperty::StaticClass()))
-	{
-		DataType = TEXT("uint32");	// Note: We hash the static class path names to UClass objects.
 	}
 	else if (Property->IsA(UObjectPropertyBase::StaticClass()))
 	{
@@ -151,7 +147,7 @@ int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Clas
 		// Note that this file has been generated automatically
 		package improbable.unreal.generated.%s;
 
-		import "improbable/unreal/gdk/core_types.schema";)""", *UnrealNameToSchemaTypeName(Class->GetName()).ToLower());
+		import "improbable/unreal/gdk/core_types.schema";)""", *UnrealNameToSchemaTypeName(Class->GetName().ToLower()));
 	Writer.PrintNewLine();
 
 	FUnrealFlatRepData RepData = GetFlatRepData(TypeInfo);
@@ -294,7 +290,12 @@ int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Clas
 		{
 			if (Group == ERPCType::RPC_NetMulticast)
 			{
-				//checkf(RPC->bReliable == false, TEXT("%s: Unreal GDK currently does not support Reliable Multicast RPCs"), *RPC->Function->GetName());
+				if (RPC->bReliable)
+				{
+					FMessageDialog::Debugf(FText::FromString(FString::Printf(TEXT("%s::%s: Unreal GDK currently does not support Reliable Multicast RPCs. This RPC will be treated as Unreliable."),
+						*GetFullCPPName(Class),
+						*RPC->Function->GetName())));
+				}
 
 				Writer.Printf("event %s.%s %s;",
 					*UnrealNameToSchemaTypeName(*RPC->Function->GetOuter()->GetName()).ToLower(),

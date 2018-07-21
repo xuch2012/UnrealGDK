@@ -4,7 +4,27 @@
 
 #include "SpatialPackageMapClient.h"
 #include "WeakObjectPtr.h"
-#include <improbable/unreal/gdk/core_types.h>
+
+void FSpatialMemoryWriter::SerializeObjectRef(improbable::unreal::UnrealObjectRef& ObjectRef)
+{
+	*this << ObjectRef.entity();
+	*this << ObjectRef.offset();
+
+	uint8 HasPath = !ObjectRef.path().empty();
+	SerializeBits(&HasPath, 1);
+	if (HasPath)
+	{
+		FString Path = FString(UTF8_TO_TCHAR(ObjectRef.path()->c_str()));
+		*this << Path;
+	}
+
+	uint8 HasOuter = !ObjectRef.outer().empty();
+	SerializeBits(&HasOuter, 1);
+	if (HasOuter)
+	{
+		SerializeObjectRef(*ObjectRef.outer());
+	}
+}
 
 FArchive& FSpatialMemoryWriter::operator<<(UObject*& Value)
 {
@@ -15,7 +35,7 @@ FArchive& FSpatialMemoryWriter::operator<<(UObject*& Value)
 		ObjectRef = PackageMap->GetUnrealObjectRefFromNetGUID(NetGUID);
 		if (ObjectRef == SpatialConstants::UNRESOLVED_OBJECT_REF)
 		{
-			// TODO: Collect unresolved objects in a set to queue up
+			UnresolvedObjects.Add(Value);
 			ObjectRef = SpatialConstants::NULL_OBJECT_REF;
 		}
 	}
@@ -24,8 +44,7 @@ FArchive& FSpatialMemoryWriter::operator<<(UObject*& Value)
 		ObjectRef = SpatialConstants::NULL_OBJECT_REF;
 	}
 
-	*this << ObjectRef.entity();
-	*this << ObjectRef.offset();
+	SerializeObjectRef(ObjectRef);
 
 	return *this;
 }

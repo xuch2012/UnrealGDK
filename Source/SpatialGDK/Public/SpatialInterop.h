@@ -14,7 +14,7 @@ class USpatialActorChannel;
 class USpatialPackageMapClient;
 class USpatialNetDriver;
 
-SPATIALGDK_API DECLARE_LOG_CATEGORY_EXTERN(LogSpatialOSInterop, Log, All);
+SPATIALGDK_API DECLARE_LOG_CATEGORY_EXTERN(LogSpatialGDKInterop, Log, All);
 
 // An general version of worker::RequestId.
 using FUntypedRequestId = decltype(worker::RequestId<void>::Id);
@@ -90,6 +90,8 @@ using FChannelToHandleToOPARMap = TMap<USpatialActorChannel*, FHandleToOPARMap>;
 
 using FOutgoingPendingArrayUpdateMap = TMap<const UObject*, FChannelToHandleToOPARMap>;
 
+using FResolvedObjects = TArray<TPair<UObject*, const improbable::unreal::UnrealObjectRef>>;
+
 // Helper function to write incoming replicated property data to an object.
 FORCEINLINE void ApplyIncomingReplicatedPropertyUpdate(const FRepHandleData& RepHandleData, UObject* Object, const void* Value, TSet<UProperty*>& RepNotifies)
 {
@@ -161,14 +163,19 @@ public:
 	worker::RequestId<worker::DeleteEntityRequest> SendDeleteEntityRequest(const FEntityId& EntityId);
 	void SendSpatialPositionUpdate(const FEntityId& EntityId, const FVector& Location);
 	void SendSpatialUpdate(USpatialActorChannel* Channel, const TArray<uint16>& RepChanged, const TArray<uint16>& MigChanged);
-	void InvokeRPC(AActor* TargetActor, const UFunction* const Function, UObject* CallingObject, void* Parameters);
+	void SendSpatialUpdateSubobject(USpatialActorChannel* Channel, UObject* Subobject, FObjectReplicator* replicator, const TArray<uint16>& RepChanged, const TArray<uint16>& MigChanged);
+	void InvokeRPC(UObject* TargetObject, const UFunction* const Function, void* Parameters);
 	void ReceiveAddComponent(USpatialActorChannel* Channel, UAddComponentOpWrapperBase* AddComponentOp);
-	void PreReceiveSpatialUpdate(USpatialActorChannel* Channel);
-	void PostReceiveSpatialUpdate(USpatialActorChannel* Channel, const TArray<UProperty*>& RepNotifies);
 
 	// Called by USpatialPackageMapClient when a UObject is "resolved" i.e. has a unreal object ref.
 	// This will dequeue pending object ref updates and RPCs which depend on this UObject existing in the package map.
 	void ResolvePendingOperations(UObject* Object, const improbable::unreal::UnrealObjectRef& ObjectRef);
+	void OnLeaveCriticalSection();
+	void ResolvePendingOperations_Internal(UObject* Object, const improbable::unreal::UnrealObjectRef& ObjectRef);
+
+	bool IsAuthoritativeDestructionAllowed() const { return bAuthoritativeDestruction; }
+	void StartIgnoringAuthoritativeDestruction() { bAuthoritativeDestruction = false; }
+	void StopIgnoringAuthoritativeDestruction() { bAuthoritativeDestruction = true; }
 
 	// Called by USpatialInteropPipelineBlock when an actor channel is opened on the client.
 	void AddActorChannel(const FEntityId& EntityId, USpatialActorChannel* Channel);
@@ -198,7 +205,7 @@ public:
 
 	void ResetOutgoingArrayRepUpdate_Internal(USpatialActorChannel* DependentChannel, uint16 Handle);
 	void QueueOutgoingArrayRepUpdate_Internal(const TSet<const UObject*>& UnresolvedObjects, USpatialActorChannel* DependentChannel, uint16 Handle);
-
+	
 	// Accessors.
 	USpatialOS* GetSpatialOS() const
 	{
@@ -247,6 +254,12 @@ private:
 
 	FChannelToHandleToOPARMap PropertyToOPAR;
 	FOutgoingPendingArrayUpdateMap ObjectToOPAR;
+
+	// Used to queue resolved objects when added during a critical section. These objects then have
+	// any pending operations resolved on them once the critical section has ended.
+	FResolvedObjects ResolvedObjectQueue;
+
+	bool bAuthoritativeDestruction;
 
 
 private:

@@ -88,14 +88,7 @@ unpackTo          "${CORE_SDK_DIR}/tools/schema_compiler-x86_64-win32"      "${U
 unpackTo          "${CORE_SDK_DIR}/schema/standard_library"                 "${UNREAL_GDK_DIR}/Binaries/ThirdParty/Improbable/Programs/schema"
 unpackTo          "${BUILD_DIR}/code_generation//Improbable.CodeGeneration" "${PACKAGE_TARGET_DIR}/Improbable.CodeGeneration"
 
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit --version 3.9.0
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit.Console --version 3.8.0
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit.ConsoleRunner --version 3.8.0
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit.Extension.NUnitProjectLoader --version 3.5.0
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit.Extension.NUnitV2Driver --version 3.6.0
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit.Extension.NUnitV2ResultWriter --version 3.5.0
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit.Extension.TeamCityEventListener --version 1.0.3
-"${IMP_NUGET}" restore-package --cache-directory="${CACHE_PATH}" --target-directory="${PACKAGE_TARGET_DIR}" --package NUnit.Extension.VSProjectLoader --version 3.7.0
+unzip "${UNREAL_GDK_DIR}/Source/Programs/Improbable.Unreal.CodeGeneration.Test/NUnit/NUnit.zip" -d "${PACKAGE_TARGET_DIR}"
 
 markEndOfBlock "Unpack dependencies"
 

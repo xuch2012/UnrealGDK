@@ -22,13 +22,9 @@ namespace improbable
 	class PositionData;
 }
 
-class UMetadataAddComponentOp;
-class UPositionAddComponentOp;
 class UCallbackDispatcher;
 class UEntityRegistry;
-class UEntityPipeline;
 class USpatialOsComponent;
-class USpatialActorChannel;
 class USpatialNetDriver;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSpatialGDKInteropPipelineBlock, Log, All);
@@ -66,6 +62,8 @@ public:
 	void LeaveCriticalSection() override;
 
 	void CleanupDeletedEntity(const FEntityId& EntityId);
+
+	bool IsInCriticalSection() const { return bInCriticalSection; }
 
 private:
 	bool bInCriticalSection;

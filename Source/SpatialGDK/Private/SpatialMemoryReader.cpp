@@ -4,14 +4,38 @@
 
 #include "SpatialPackageMapClient.h"
 #include "WeakObjectPtr.h"
-#include <improbable/unreal/gdk/core_types.h>
+
+void FSpatialMemoryReader::DeserializeObjectRef(improbable::unreal::UnrealObjectRef& ObjectRef)
+{
+	*this << ObjectRef.entity();
+	*this << ObjectRef.offset();
+
+	uint8 HasPath;
+	SerializeBits(&HasPath, 1);
+	if (HasPath)
+	{
+		FString Path;
+		*this << Path;
+
+		ObjectRef.path() = std::string(TCHAR_TO_UTF8(*Path));
+	}
+
+	uint8 HasOuter;
+	SerializeBits(&HasOuter, 1);
+	if (HasOuter)
+	{
+		improbable::unreal::UnrealObjectRef Outer;
+		DeserializeObjectRef(Outer);
+
+		ObjectRef.outer() = Outer;
+	}
+}
 
 FArchive& FSpatialMemoryReader::operator<<(UObject*& Value)
 {
 	improbable::unreal::UnrealObjectRef ObjectRef;
 
-	*this << ObjectRef.entity();
-	*this << ObjectRef.offset();
+	DeserializeObjectRef(ObjectRef);
 
 	check(ObjectRef != SpatialConstants::UNRESOLVED_OBJECT_REF);
 	if (ObjectRef == SpatialConstants::NULL_OBJECT_REF)

@@ -115,6 +115,9 @@ struct FUnrealProperty
 	TSharedPtr<FUnrealRepData> ReplicationData; // Only set if property is replicated.
 	TSharedPtr<FUnrealMigratableData> MigratableData; // Only set if property is migratable (and not replicated).
 	TWeakPtr<FUnrealType> ContainerType; // Not set if this property is an RPC parameter.
+
+	// These variables are used for unique variable checksum generation. We do this to accurately match properties at run-time.
+	// They are used in the function GenerateChecksum which will use all three variables and the UProperty itself to create a checksum for each FUnrealProperty.
 	int32 StaticArrayIndex;
 	uint32 CompatibleChecksum;
 	uint32 ParentChecksum;
@@ -151,6 +154,10 @@ using FUnrealFlatRepData = TMap<EReplicatedPropertyGroup, TMap<uint16, TSharedPt
 using FUnrealRPCsByType = TMap<ERPCType, TArray<TSharedPtr<FUnrealRPC>>>;
 using FCmdHandlePropertyMap = TMap<uint16, TSharedPtr<FUnrealProperty>>;
 
+typedef TMap<FString, TArray<FString>> ClassHeaderMap;
+
+extern ClassHeaderMap InteropGeneratedClasses;
+
 // Given a UClass, returns either "AFoo" or "UFoo" depending on whether Foo is a subclass of actor.
 FString GetFullCPPName(UClass* Class);
 
@@ -186,8 +193,11 @@ void VisitAllProperties(TSharedPtr<FUnrealType> TypeNode, TFunction<bool(TShared
 // Similar to 'VisitAllObjects', but instead applies the Visitor function to all parameters in an RPC (and subproperties of structs/objects where appropriate).
 void VisitAllProperties(TSharedPtr<FUnrealRPC> RPCNode, TFunction<bool(TSharedPtr<FUnrealProperty>)> Visitor, bool bRecurseIntoSubobjects);
 
-// Generates a unique checksum for the Property that allows matching between Unreal's RepLayou Cmds.
+// Generates a unique checksum for the Property that allows matching to Unreal's RepLayout Cmds.
 uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 StaticArrayIndex);
+
+// Creates a new FUnrealProperty for the included UProperty, generates a checksum for it and then adds it to the TypeNode included.
+TSharedPtr<FUnrealProperty> CreateUnrealProperty(TSharedPtr<FUnrealType> TypeNode, UProperty* Property, uint32 ParentChecksum, uint32 StaticArrayIndex);
 
 // Generates an AST from an Unreal UStruct or UClass.
 // At the moment, this function receives a manual list of migratable property chains in this form:
@@ -196,12 +206,7 @@ uint32 GenerateChecksum(UProperty* Property, uint32 ParentChecksum, int32 Static
 //	   {"OtherProperty", "PropertyWithinOtherProperty"}
 //   }
 // In the future, we can get this information directly from the UStruct*.
-TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, const TArray<TArray<FName>>& MigratableProperties, uint32 ParentChecksum, int32 StaticArrayIndex, bool bIsRPC);
-
-// Takes an FUnrealProperty (which is a Spatial wrapper around UProperties for replicated properties) and compares its parents against
-// the parents found in a 'RepLayout.Cmd.ParentPropertyChain' (Improbable engine modification to track parent properties when generating a RepLayout).
-// If all properties in the FUnrealProperty and ParentPropertyChain are the same, this returns true.
-bool AreParentPropertiesTheSame(FUnrealProperty& SpatialWrapperProperty, TArray<UProperty*> CmdParentPropertyChain);
+TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksum, int32 StaticArrayIndex, bool bIsRPC);
 
 // Traverses an AST, and generates a flattened list of replicated properties, which will match the Cmds array of FRepLayout.
 // The list of replicated properties will all have the ReplicatedData field set to a valid FUnrealRepData node which contains
@@ -221,6 +226,9 @@ FCmdHandlePropertyMap GetFlatMigratableData(TSharedPtr<FUnrealType> TypeInfo);
 //
 // This function will traverse into subobject properties.
 FUnrealRPCsByType GetAllRPCsByType(TSharedPtr<FUnrealType> TypeInfo);
+
+// Get all supported components (not all subobjects) of an Actor class
+TArray<UClass*> GetAllSupportedComponents(UClass* Class);
 
 // Given an AST, traverses all its parameters (and properties within structs) and generates a complete flattened list of properties.
 TArray<TSharedPtr<FUnrealProperty>> GetFlatRPCParameters(TSharedPtr<FUnrealRPC> RPCNode);
