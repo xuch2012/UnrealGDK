@@ -179,7 +179,7 @@ void USpatialInterop::SendSpatialUpdate(USpatialActorChannel* Channel, const TAr
 	if (!Binding)
 	{
 		// IMPROBABLE: MCS - Readded this log as I'm curious about which classes we might not be supporting
-		UE_LOG(LogSpatialOSInterop, Warning, TEXT("SpatialUpdateInterop: Trying to send Spatial update on unsupported class %s."),
+		UE_LOG(LogSpatialGDKInterop, Warning, TEXT("SpatialUpdateInterop: Trying to send Spatial update on unsupported class %s."),
 			*Channel->Actor->GetClass()->GetName());
 		return;
 	}
