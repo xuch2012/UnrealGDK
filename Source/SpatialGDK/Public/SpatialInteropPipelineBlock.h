@@ -7,6 +7,7 @@
 #include "ComponentIdentifier.h"
 #include "EntityId.h"
 #include "EntityPipelineBlock.h"
+#include "SpatialInterop.h"
 #include "SpatialInteropPipelineBlock.generated.h"
 
 namespace worker
@@ -48,7 +49,7 @@ class SPATIALGDK_API USpatialInteropPipelineBlock : public UEntityPipelineBlock
 	GENERATED_BODY()
 
 public:
-	void Init(UEntityRegistry* Registry, USpatialNetDriver* Driver, UWorld* LoadedWorld);
+	void Init(UEntityRegistry* Registry, USpatialNetDriver* Driver, UWorld* LoadedWorld, USpatialInterop* Interop);
 
 	void AddEntity(const worker::AddEntityOp& AddEntityOp) override;
 	void RemoveEntity(const worker::RemoveEntityOp& RemoveEntityOp) override;

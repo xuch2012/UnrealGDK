@@ -24,12 +24,14 @@
 #include "UnrealMetadataAddComponentOp.h"
 #include "UnrealMetadataComponent.h"
 
+//#include <improbable/unreal/gdk/global_state_manager.h>
+
 // TODO(David): Needed for ApplyNetworkMovementMode hack below.
 #include "GameFramework/CharacterMovementComponent.h"
 
 DEFINE_LOG_CATEGORY(LogSpatialGDKInteropPipelineBlock);
 
-void USpatialInteropPipelineBlock::Init(UEntityRegistry* Registry, USpatialNetDriver* Driver, UWorld* LoadedWorld)
+void USpatialInteropPipelineBlock::Init(UEntityRegistry* Registry, USpatialNetDriver* Driver, UWorld* LoadedWorld, USpatialInterop* Interop)
 {
 	EntityRegistry = Registry;
 	NetDriver = Driver;
@@ -46,6 +48,31 @@ void USpatialInteropPipelineBlock::Init(UEntityRegistry* Registry, USpatialNetDr
 			KnownComponents.Emplace(CDO->GetComponentId(), *It);
 		}
 	}
+
+	//// Register GSM callbacks
+	//TSharedPtr<worker::View> View = Driver->GetSpatialOS()->GetView().Pin();
+
+	//// Global State Manager setup
+	//View->OnAddComponent<improbable::unreal::GlobalStateManager>([Interop](const worker::AddComponentOp<improbable::unreal::GlobalStateManager>& op)
+	//{
+	//	Interop->LinkExistingSingletonActors(op.Data.singleton_name_to_entity_id());
+	//});
+
+	//View->OnComponentUpdate<improbable::unreal::GlobalStateManager>([Interop](const worker::ComponentUpdateOp<improbable::unreal::GlobalStateManager>& op)
+	//{
+	//	if (op.Update.singleton_name_to_entity_id().data())
+	//	{
+	//		Interop->LinkExistingSingletonActors(*op.Update.singleton_name_to_entity_id().data());
+	//	}
+	//});
+
+	//View->OnAuthorityChange<improbable::unreal::GlobalStateManager>([Interop](const worker::AuthorityChangeOp& op)
+	//{
+	//	if (op.Authority == worker::Authority::kAuthoritative)
+	//	{
+	//		Interop->ExecuteInitialSingletonActorReplication(*Interop->GetSingletonNameToEntityId());
+	//	}
+	//});
 }
 
 void USpatialInteropPipelineBlock::AddEntity(const worker::AddEntityOp& AddEntityOp)

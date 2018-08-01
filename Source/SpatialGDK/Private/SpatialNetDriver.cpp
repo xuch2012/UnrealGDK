@@ -111,14 +111,6 @@ void USpatialNetDriver::OnSpatialOSConnected()
 {
 	UE_LOG(LogSpatialOSNetDriver, Log, TEXT("Connected to SpatialOS."));
 
-	InteropPipelineBlock = NewObject<USpatialInteropPipelineBlock>();
-	InteropPipelineBlock->Init(EntityRegistry, this, GetWorld());
-	SpatialOSInstance->GetEntityPipeline()->AddBlock(InteropPipelineBlock);
-
-	TArray<FString> BlueprintPaths;
-	BlueprintPaths.Add(TEXT(ENTITY_BLUEPRINTS_FOLDER));
-
-	EntityRegistry->RegisterEntityBlueprints(BlueprintPaths);
 
 	// Each connection stores a URL with various optional settings (host, port, map, netspeed...)
 	// We currently don't make use of any of these as some are meaningless in a SpatialOS world, and some are less of a priority.
@@ -151,6 +143,15 @@ void USpatialNetDriver::OnSpatialOSConnected()
 	}
 
 	Interop->Init(SpatialOSInstance, this, TimerManager);
+
+	InteropPipelineBlock = NewObject<USpatialInteropPipelineBlock>();
+	InteropPipelineBlock->Init(EntityRegistry, this, GetWorld(), Interop);
+	SpatialOSInstance->GetEntityPipeline()->AddBlock(InteropPipelineBlock);
+
+	TArray<FString> BlueprintPaths;
+	BlueprintPaths.Add(TEXT(ENTITY_BLUEPRINTS_FOLDER));
+
+	EntityRegistry->RegisterEntityBlueprints(BlueprintPaths);
 }
 
 void USpatialNetDriver::OnSpatialOSDisconnected(const FString& Reason)
