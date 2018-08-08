@@ -11,6 +11,7 @@ void FSpatialGDKEditorToolbarCommands::RegisterCommands()
 	UI_COMMAND(StartSpatialOSStackAction, "Launch", "Starts a local instance of SpatialOS.", EUserInterfaceActionType::Button, FInputGesture());
 	UI_COMMAND(StopSpatialOSStackAction, "Stop", "Stops SpatialOS.", EUserInterfaceActionType::Button, FInputGesture());
 	UI_COMMAND(LaunchInspectorWebPageAction, "Inspector", "Launches default web browser to SpatialOS Inspector.", EUserInterfaceActionType::Button, FInputGesture());
+	UI_COMMAND(PlatformSDK, "PlatformSDK", "Runs a PlatformSDK command.", EUserInterfaceActionType::Button, FInputGesture());
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -78,6 +78,12 @@ TSharedRef<FSlateStyleSet> FSpatialGDKEditorToolbarStyle::Create()
 	Style->Set("SpatialGDKEditorToolbar.LaunchInspectorWebPageAction.Small",
 		new IMAGE_BRUSH(TEXT("Inspector@0.5x"), Icon20x20));
 
+	Style->Set("SpatialGDKEditorToolbar.PlatformSDK",
+		new IMAGE_BRUSH(TEXT("Snapshot"), Icon40x40));
+
+	Style->Set("SpatialGDKEditorToolbar.PlatformSDK.Small",
+		new IMAGE_BRUSH(TEXT("Snapshot@0.5x"), Icon20x20));
+
 	return Style;
 }
 

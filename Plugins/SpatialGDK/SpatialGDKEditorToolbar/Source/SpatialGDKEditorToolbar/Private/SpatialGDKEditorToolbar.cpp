@@ -182,6 +182,11 @@ void FSpatialGDKEditorToolbarModule::MapActions(TSharedPtr<class FUICommandList>
 		FSpatialGDKEditorToolbarCommands::Get().LaunchInspectorWebPageAction,
 		FExecuteAction::CreateRaw(this, &FSpatialGDKEditorToolbarModule::LaunchInspectorWebpageButtonClicked),
 		FCanExecuteAction());
+
+	PluginCommands->MapAction(
+        FSpatialGDKEditorToolbarCommands::Get().PlatformSDK,
+        FExecuteAction::CreateRaw(this, &FSpatialGDKEditorToolbarModule::PlatformSDKButtonClicked),
+        FCanExecuteAction());
 }
 
 void FSpatialGDKEditorToolbarModule::SetupToolbar(TSharedPtr<class FUICommandList> PluginCommands)
@@ -218,6 +223,7 @@ void FSpatialGDKEditorToolbarModule::AddMenuExtension(FMenuBuilder& Builder)
 		Builder.AddMenuEntry(FSpatialGDKEditorToolbarCommands::Get().StartSpatialOSStackAction);
 		Builder.AddMenuEntry(FSpatialGDKEditorToolbarCommands::Get().StopSpatialOSStackAction);
 		Builder.AddMenuEntry(FSpatialGDKEditorToolbarCommands::Get().LaunchInspectorWebPageAction);
+        Builder.AddMenuEntry(FSpatialGDKEditorToolbarCommands::Get().PlatformSDK);
 	}
 	Builder.EndSection();
 }
@@ -230,6 +236,7 @@ void FSpatialGDKEditorToolbarModule::AddToolbarExtension(FToolBarBuilder& Builde
 	Builder.AddToolBarButton(FSpatialGDKEditorToolbarCommands::Get().StartSpatialOSStackAction);
 	Builder.AddToolBarButton(FSpatialGDKEditorToolbarCommands::Get().StopSpatialOSStackAction);
 	Builder.AddToolBarButton(FSpatialGDKEditorToolbarCommands::Get().LaunchInspectorWebPageAction);
+    Builder.AddToolBarButton(FSpatialGDKEditorToolbarCommands::Get().PlatformSDK);
 }
 
 void FSpatialGDKEditorToolbarModule::CreateSnapshotButtonClicked()
@@ -405,6 +412,33 @@ void FSpatialGDKEditorToolbarModule::LaunchInspectorWebpageButtonClicked()
 		NotificationItem->SetCompletionState(SNotificationItem::CS_Fail);
 		NotificationItem->ExpireAndFadeout();
 	}
+}
+
+void FSpatialGDKEditorToolbarModule::PlatformSDKButtonClicked()
+{
+    UE_LOG(LogSpatialGDKEditor, Error, TEXT("PlatformSDKButtonClicked Start"));
+    typedef const char* (*_RunPlatformSDK)(char* Arg);
+    FString PlatformSDK = TEXT("E:\\Projects\\UnrealGDKTestSuite\\Game\\Binaries\\ThirdParty\\Improbable\\CSharpPlatfromSDK\\Improbable.SpatialOS.Platform.dll");
+ 
+	void *DLLHandle = NULL;
+	if (FPaths::FileExists(PlatformSDK))
+	{
+		DLLHandle = FPlatformProcess::GetDllHandle(*PlatformSDK); // Retrieve the DLL.
+	}
+	if (DLLHandle != NULL)
+	{
+        _RunPlatformSDK DLLFuncPtr = NULL;
+		FString ProcName = "ListDeployments";
+        DLLFuncPtr = (_RunPlatformSDK)FPlatformProcess::GetDllExport(DLLHandle, *ProcName);
+		if (DLLFuncPtr != NULL)
+		{
+			const char* result = DLLFuncPtr("deployment list");
+			FString Output(result);
+            UE_LOG(LogSpatialGDKEditor, Error, TEXT("%s"), *Output);
+		}
+	}
+
+    UE_LOG(LogSpatialGDKEditor, Error, TEXT("PlatformSDKButtonClicked Finished"));
 }
 
 bool FSpatialGDKEditorToolbarModule::StartSpatialOSStackCanExecute() const

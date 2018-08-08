@@ -53,6 +53,8 @@ private:
 	void GenerateInteropCodeButtonClicked();
 	void OnPropertyChanged(UObject* ObjectBeingModified, FPropertyChangedEvent& PropertyChangedEvent);
 
+	void PlatformSDKButtonClicked();
+
 private:
 	bool CanExecuteInteropCodeGen();
 	void StopRunningStack();
