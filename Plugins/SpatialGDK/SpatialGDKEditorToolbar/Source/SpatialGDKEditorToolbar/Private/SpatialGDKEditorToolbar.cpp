@@ -428,7 +428,7 @@ void FSpatialGDKEditorToolbarModule::PlatformSDKButtonClicked()
 	if (DLLHandle != NULL)
 	{
         _RunPlatformSDK DLLFuncPtr = NULL;
-		FString ProcName = "ListDeployments";
+		FString ProcName = "Improbable.SpatialOS.Deployment.V1Alpha1.ListDeploymentsRequest";
         DLLFuncPtr = (_RunPlatformSDK)FPlatformProcess::GetDllExport(DLLHandle, *ProcName);
 		if (DLLFuncPtr != NULL)
 		{
