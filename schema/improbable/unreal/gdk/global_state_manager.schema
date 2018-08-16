@@ -3,4 +3,5 @@ package improbable.unreal;
 component GlobalStateManager {
     id = 100007;
     map<string, EntityId> singleton_name_to_entity_id = 1;
+    int32 timestamp = 2;
 }

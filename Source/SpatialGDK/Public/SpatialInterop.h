@@ -217,6 +217,7 @@ public:
 	void LinkExistingSingletonActors(const NameToEntityIdMap& SingletonNameToEntityId);
 	// Handle GSM Authority received
 	void ExecuteInitialSingletonActorReplication(const NameToEntityIdMap& SingletonNameToEntityId);
+	void SetupTime(const worker::AuthorityChangeOp& op);
 	bool IsSingletonClass(UClass* Class);
 	NameToEntityIdMap* GetSingletonNameToEntityId() const;
 
@@ -237,6 +238,8 @@ private:
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;
+
+	void SetGameState(const int32* Timestamp);
 
 	UPROPERTY()
 	USpatialPackageMapClient* PackageMap;
