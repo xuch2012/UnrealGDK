@@ -229,6 +229,7 @@ public:
 	void LinkExistingSingletonActors(const PathNameToEntityIdMap& SingletonNameToEntityId);
 	// Handle GSM Authority received
 	void ExecuteInitialSingletonActorReplication(const PathNameToEntityIdMap& SingletonNameToEntityId);
+	void SetupTime(const worker::AuthorityChangeOp& op);
 	bool IsSingletonClass(UClass* Class);
 	improbable::unreal::GlobalStateManagerData* GetGlobalStateManagerData() const;
 	PathNameToEntityIdMap* GetSingletonNameToEntityId() const;
@@ -260,6 +261,8 @@ private:
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;
+
+	void SetGameState(const int32* Timestamp);
 
 	UPROPERTY()
 	USpatialPackageMapClient* PackageMap;

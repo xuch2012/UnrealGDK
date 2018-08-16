@@ -101,14 +101,15 @@ bool CreateSingletonToIdMap(PathNameToEntityIdMap& SingletonNameToEntityId)
 	return true;
 }
 
-worker::Entity CreateGlobalStateManagerEntity(const PathNameToEntityIdMap& SingletonNameToEntityId)
+
+worker::Entity CreateGlobalStateManagerEntity(const NameToEntityIdMap& SingletonNameToEntityId, const int& timestamp)
 {
 	return improbable::unreal::FEntityBuilder::Begin()
-		.AddPositionComponent(Position::Data{Origin}, UnrealWorkerWritePermission)
+		.AddPositionComponent(Position::Data{ Origin }, UnrealWorkerWritePermission)
 		.AddMetadataComponent(Metadata::Data("GlobalStateManager"))
 		.SetPersistence(true)
 		.SetReadAcl(AnyWorkerReadPermission)
-		.AddComponent<unreal::GlobalStateManager>(unreal::GlobalStateManager::Data{ SingletonNameToEntityId, {} }, UnrealWorkerWritePermission)
+		.AddComponent<unreal::GlobalStateManager>(unreal::GlobalStateManager::Data{ SingletonNameToEntityId, {}, timestamp }, UnrealWorkerWritePermission)
 		.AddComponent<improbable::unreal::UnrealMetadata>(improbable::unreal::UnrealMetadata::Data{}, UnrealWorkerWritePermission)
 		.Build();
 }
@@ -165,7 +166,7 @@ bool SpatialGDKGenerateSnapshot(UWorld* World)
 		return false;
 	}
 
-	Result = OutputStream.WriteEntity(SpatialConstants::GLOBAL_STATE_MANAGER, CreateGlobalStateManagerEntity(SingletonNameToEntityId));
+	Result = OutputStream.WriteEntity(SpatialConstants::GLOBAL_STATE_MANAGER, CreateGlobalStateManagerEntity(SingletonNameToEntityId, 0));
 	if (!Result.empty())
 	{
 		UE_LOG(LogSpatialGDKSnapshot, Error, TEXT("Error generating snapshot: %s"), UTF8_TO_TCHAR(Result.value_or("").c_str()));

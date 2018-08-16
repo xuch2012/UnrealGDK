@@ -82,7 +82,9 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 		{
 			SetGameState(op.Update.timestamp().data());
 		}
+		SetGameState(op.Update.timestamp().data());
 	});
+
 
 	View->OnAuthorityChange<improbable::unreal::GlobalStateManager>([this](const worker::AuthorityChangeOp& op)
 	{
@@ -90,8 +92,10 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 		{
 			ExecuteInitialSingletonActorReplication(*GetSingletonNameToEntityId());
 			RegisterReplicatedStablyNamedActors();
+			SetupTime(op);
 		}
 	});
+
 
 	View->OnReserveEntityIdResponse([this](const worker::ReserveEntityIdResponseOp& Op)
 	{
@@ -121,6 +125,11 @@ USpatialTypeBinding* USpatialInterop::GetTypeBindingByClass(UClass* Class) const
 		}
 	}
 	return nullptr;
+}
+
+void USpatialInterop::SetGameState(const int32* Timestamp)
+{
+	GetWorld()->GetGameState()->SpatialStartTime = *Timestamp;
 }
 
 worker::RequestId<worker::CreateEntityRequest> USpatialInterop::SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged)
@@ -840,6 +849,17 @@ void USpatialInterop::LinkExistingSingletonActors(const PathNameToEntityIdMap& S
 		PackageMap->ResolveEntityActor(SingletonActor, SingletonEntityId, Metadata->subobject_name_to_offset());
 		UE_LOG(LogSpatialGDKInterop, Log, TEXT("Linked Singleton Actor %s with id %d"), *SingletonActor->GetClass()->GetName(), SingletonEntityId.ToSpatialEntityId());
 	}
+}
+
+void USpatialInterop::SetupTime(const worker::AuthorityChangeOp& op)
+{
+	improbable::unreal::GlobalStateManager::Update Update;
+	int32 TimeStamp = FDateTime().UtcNow().ToUnixTimestamp();
+	Update.set_timestamp(TimeStamp);
+
+	// update SpatialS with new start
+	TSharedPtr<worker::Connection> Connection = SpatialOSInstance->GetConnection().Pin();
+	Connection->SendComponentUpdate<improbable::unreal::GlobalStateManager>(worker::EntityId((long)SpatialConstants::GLOBAL_STATE_MANAGER), Update);
 }
 
 void USpatialInterop::ExecuteInitialSingletonActorReplication(const PathNameToEntityIdMap& SingletonNameToEntityId)
