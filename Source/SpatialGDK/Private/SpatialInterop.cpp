@@ -71,7 +71,10 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 			LinkExistingSingletonActors(*op.Update.singleton_name_to_entity_id().data());
 		}
 
-		SetGameState(op.Update.timestamp().data());
+		if (op.Update.timestamp().data())
+		{
+			SetGameState(op.Update.timestamp().data());
+		}
 	});
 
 
