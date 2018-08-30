@@ -72,9 +72,15 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 		{
 			LinkExistingSingletonActors(*op.Update.singleton_name_to_entity_id().data());
 		}
+
 		if (op.Update.stably_named_path_to_entity_id().data())
 		{
 			DeleteIrrelevantReplicatedStablyNamedActors(*op.Update.stably_named_path_to_entity_id().data());
+		}
+
+		if (op.Update.timestamp().data())
+		{
+			SetGameState(op.Update.timestamp().data());
 		}
 	});
 
