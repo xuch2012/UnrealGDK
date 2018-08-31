@@ -12,6 +12,7 @@ public class SpatialGDK : ModuleRules
 {
     public SpatialGDK(ReadOnlyTargetRules Target) : base(Target)
     {
+        bFasterWithoutUnity = true;
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
         PublicIncludePaths.AddRange(

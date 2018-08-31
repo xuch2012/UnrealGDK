@@ -128,7 +128,10 @@ USpatialTypeBinding* USpatialInterop::GetTypeBindingByClass(UClass* Class) const
 
 void USpatialInterop::SetGameState(const int32* Timestamp)
 {
-	GetWorld()->GetGameState()->SpatialStart = *Timestamp;
+	if (GetWorld()->GetGameState()->SpatialStart == 0)
+	{
+		//GetWorld()->GetGameState()->SpatialStart = *Timestamp;
+	}
 }
 
 worker::RequestId<worker::CreateEntityRequest> USpatialInterop::SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged)
@@ -855,7 +858,8 @@ void USpatialInterop::SetupTime(const worker::AuthorityChangeOp& op)
 	improbable::unreal::GlobalStateManager::Update Update;
 	int32 TimeStamp = FDateTime().UtcNow().ToUnixTimestamp();
 	Update.set_timestamp(TimeStamp);
-
+	GetWorld()->GetGameState()->SpatialStart = static_cast<int64>(TimeStamp);
+	
 	// update SpatialS with new start
 	TSharedPtr<worker::Connection> Connection = SpatialOSInstance->GetConnection().Pin();
 	Connection->SendComponentUpdate<improbable::unreal::GlobalStateManager>(worker::EntityId((long)SpatialConstants::GLOBAL_STATE_MANAGER), Update);
