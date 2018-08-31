@@ -102,7 +102,7 @@ bool CreateSingletonToIdMap(PathNameToEntityIdMap& SingletonNameToEntityId)
 }
 
 
-worker::Entity CreateGlobalStateManagerEntity(const NameToEntityIdMap& SingletonNameToEntityId, const int& timestamp)
+worker::Entity CreateGlobalStateManagerEntity(const PathNameToEntityIdMap& SingletonNameToEntityId, const int& timestamp)
 {
 	return improbable::unreal::FEntityBuilder::Begin()
 		.AddPositionComponent(Position::Data{ Origin }, UnrealWorkerWritePermission)

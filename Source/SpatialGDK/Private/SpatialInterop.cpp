@@ -82,7 +82,6 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 		{
 			SetGameState(op.Update.timestamp().data());
 		}
-		SetGameState(op.Update.timestamp().data());
 	});
 
 
@@ -129,7 +128,7 @@ USpatialTypeBinding* USpatialInterop::GetTypeBindingByClass(UClass* Class) const
 
 void USpatialInterop::SetGameState(const int32* Timestamp)
 {
-	GetWorld()->GetGameState()->SpatialStartTime = *Timestamp;
+	GetWorld()->GetGameState()->SpatialStart = *Timestamp;
 }
 
 worker::RequestId<worker::CreateEntityRequest> USpatialInterop::SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged)
