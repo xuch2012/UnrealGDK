@@ -10,7 +10,7 @@ SPATIALGDK_API DECLARE_LOG_CATEGORY_EXTERN(LogSpatialGDKGameState, Log, All);
 
 // Extension of GameState also containing information about time synchronized across managed workers.
 
-UCLASS()
+UCLASS(SpatialType = Singleton)
 class SPATIALGDK_API ASpatialGameState : public AGameState
 {
 	GENERATED_BODY()

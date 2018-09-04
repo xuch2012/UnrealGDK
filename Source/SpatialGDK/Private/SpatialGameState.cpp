@@ -31,7 +31,7 @@ uint64 ASpatialGameState::GetSpatialTime() const
 {
 	if (SpatialStartTime == 0)
 	{
-		UE_LOG(LogSpatialGDKGameState, Warning, TEXT("Spatial game start time has not been set yet."))
+		UE_LOG(LogSpatialGDKGameState, Warning, TEXT("Spatial start time has not been set yet."))
 		return 0;
 	}
 
