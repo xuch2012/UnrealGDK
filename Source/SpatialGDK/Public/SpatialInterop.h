@@ -229,7 +229,7 @@ public:
 	void LinkExistingSingletonActors(const PathNameToEntityIdMap& SingletonNameToEntityId);
 	// Handle GSM Authority received
 	void ExecuteInitialSingletonActorReplication(const PathNameToEntityIdMap& SingletonNameToEntityId);
-	void SetupTime(const worker::AuthorityChangeOp& op);
+	int32 SetupTime(int32 CurrentSpatialTimestamp);
 	bool IsSingletonClass(UClass* Class);
 	improbable::unreal::GlobalStateManagerData* GetGlobalStateManagerData() const;
 	PathNameToEntityIdMap* GetSingletonNameToEntityId() const;
@@ -294,6 +294,8 @@ private:
 
 	// Pending incoming RPCs.
 	FPendingIncomingRPCMap PendingIncomingRPCs;
+	void QueryCurrentTime();
+	worker::RequestId<worker::EntityQueryRequest> QueryId;
 
 	FChannelToHandleToOPARMap PropertyToOPAR;
 	FOutgoingPendingArrayUpdateMap ObjectToOPAR;
@@ -307,7 +309,6 @@ private:
 	FResolvedObjects ResolvedObjectQueue;
 
 	bool bAuthoritativeDestruction;
-
 
 private:
 	void RegisterInteropType(UClass* Class, USpatialTypeBinding* Binding);

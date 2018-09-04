@@ -64,6 +64,7 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 	{
 		LinkExistingSingletonActors(op.Data.singleton_name_to_entity_id());
 		DeleteIrrelevantReplicatedStablyNamedActors(op.Data.stably_named_path_to_entity_id());
+		SetupTime(op.Data.timestamp());
 	});
 
 	View->OnComponentUpdate<improbable::unreal::GlobalStateManager>([this](const worker::ComponentUpdateOp<improbable::unreal::GlobalStateManager>& op)
@@ -91,10 +92,17 @@ void USpatialInterop::Init(USpatialOS* Instance, USpatialNetDriver* Driver, FTim
 		{
 			ExecuteInitialSingletonActorReplication(*GetSingletonNameToEntityId());
 			RegisterReplicatedStablyNamedActors();
-			SetupTime(op);
 		}
 	});
 
+	View->OnEntityQueryResponse([this](const worker::EntityQueryResponseOp& op)
+	{
+		//if(op.RequestId ==  QueryId)
+		//{
+			//auto Entity = op.Result.find(worker::EntityId{ 100007 });
+			//for()
+		//}
+	});
 
 	View->OnReserveEntityIdResponse([this](const worker::ReserveEntityIdResponseOp& Op)
 	{
@@ -128,10 +136,8 @@ USpatialTypeBinding* USpatialInterop::GetTypeBindingByClass(UClass* Class) const
 
 void USpatialInterop::SetGameState(const int32* Timestamp)
 {
-	if (GetWorld()->GetGameState()->SpatialStart == 0)
-	{
-		//GetWorld()->GetGameState()->SpatialStart = *Timestamp;
-	}
+	UE_LOG(LogSpatialGDKInterop, Warning, TEXT("Reupdating timestamp"));
+	GetWorld()->GetGameState()->SpatialStart = static_cast<int64>(*Timestamp);
 }
 
 worker::RequestId<worker::CreateEntityRequest> USpatialInterop::SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged)
@@ -853,16 +859,39 @@ void USpatialInterop::LinkExistingSingletonActors(const PathNameToEntityIdMap& S
 	}
 }
 
-void USpatialInterop::SetupTime(const worker::AuthorityChangeOp& op)
+void USpatialInterop::QueryCurrentTime()
 {
+	TSharedPtr<worker::Connection> lockedConnection = SpatialOSInstance->GetConnection().Pin();
+	//replace with commander code
+	worker::query::SnapshotResultType SnapshotType{};
+	worker::query::ComponentConstraint ComponentIdConstraint{ 3 };
+	worker::query::EntityIdConstraint EntityIdConstraint{ 100007 };
+	worker::query::AndConstraint SpatialConstraint{ ComponentIdConstraint, EntityIdConstraint };
+
+	worker::query::EntityQuery Query{ SpatialConstraint,  SnapshotType };
+	QueryId = lockedConnection->SendEntityQueryRequest(Query, 1000);
+}
+
+int32 USpatialInterop::SetupTime(int32 CurrentSpatialTimestamp)
+{
+	if ((CurrentSpatialTimestamp != 0))
+	{
+		if (GetWorld()->GetGameState())
+		{
+			UE_LOG(LogSpatialGDKInterop, Warning, TEXT("Timestamp set previously"));
+			GetWorld()->GetGameState()->SpatialStart = static_cast<int64>(CurrentSpatialTimestamp);
+		}
+		return CurrentSpatialTimestamp;
+	}
+
 	improbable::unreal::GlobalStateManager::Update Update;
 	int32 TimeStamp = FDateTime().UtcNow().ToUnixTimestamp();
 	Update.set_timestamp(TimeStamp);
-	GetWorld()->GetGameState()->SpatialStart = static_cast<int64>(TimeStamp);
 	
 	// update SpatialS with new start
 	TSharedPtr<worker::Connection> Connection = SpatialOSInstance->GetConnection().Pin();
 	Connection->SendComponentUpdate<improbable::unreal::GlobalStateManager>(worker::EntityId((long)SpatialConstants::GLOBAL_STATE_MANAGER), Update);
+	return TimeStamp;
 }
 
 void USpatialInterop::ExecuteInitialSingletonActorReplication(const PathNameToEntityIdMap& SingletonNameToEntityId)
