@@ -60,13 +60,14 @@ public:
 	FNetworkGUID GetNetGUIDFromEntityId(worker::EntityId EntityId) const;
 
 private:
+	void FSpatialNetGUIDCache::NetworkRemapObjectRefPaths(improbable::unreal::UnrealObjectRef& ObjectRef) const;
+	FNetworkGUID GetNetGUIDFromUnrealObjectRefInternal(const improbable::unreal::UnrealObjectRef& ObjectRef);
+
 	FNetworkGUID GetOrAssignNetGUID_SpatialGDK(const UObject* Object);
 	void RegisterObjectRef(FNetworkGUID NetGUID, const improbable::unreal::UnrealObjectRef& ObjectRef);
 	
 	FNetworkGUID RegisterNetGUIDFromPath(const FString& PathName, const FNetworkGUID& OuterGUID);
 	FNetworkGUID GenerateNewNetGUID(const int32 IsStatic);
-
-	void SanitizeObjectRefPath(improbable::unreal::UnrealObjectRef& ObjectRef);
 
 	TMap<FNetworkGUID, FHashableUnrealObjectRef> NetGUIDToUnrealObjectRef;
 	TMap<FHashableUnrealObjectRef, FNetworkGUID> UnrealObjectRefToNetGUID;
