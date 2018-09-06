@@ -282,27 +282,13 @@ bool USpatialActorChannel::ReplicateActor()
 			//check(!Actor->IsFullNameStableForNetworking() || Interop->CanSpawnReplicatedStablyNamedActors());
 
 			// When a player is connected, a FUniqueNetIdRepl is created with the players worker ID. This eventually gets stored
-			// inside APlayerState::UniqueId when UWorld::SpawnPlayActor is called. If this actor channel is managing a pawn or a 
-			// player controller, get the player state.
+			// inside APlayerState::UniqueId when UWorld::SpawnPlayActor is called. If this actor has an owner, get the player state
+
 			FString PlayerWorkerId;
-			APlayerState* PlayerState = Cast<APlayerState>(Actor);
-			if (!PlayerState)
+			// Relies on the fact that we keep a fake connection for each player controller
+			if (USpatialNetConnection* Connection = Cast<USpatialNetConnection>(Actor->GetNetConnection()))
 			{
-				if (APawn* Pawn = Cast<APawn>(Actor))
-				{
-					PlayerState = Pawn->PlayerState;
-				}
-			}
-			if (!PlayerState)
-			{
-				if (PlayerController)
-				{
-					PlayerState = PlayerController->PlayerState;
-				}
-			}
-			if (PlayerState)
-			{
-				PlayerWorkerId = PlayerState->UniqueId.ToString();
+				PlayerWorkerId = Connection->PlayerController->PlayerState->UniqueId.ToString();
 			}
 			else
 			{
