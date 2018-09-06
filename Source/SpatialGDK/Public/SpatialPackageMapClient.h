@@ -66,6 +66,8 @@ private:
 	FNetworkGUID RegisterNetGUIDFromPath(const FString& PathName, const FNetworkGUID& OuterGUID);
 	FNetworkGUID GenerateNewNetGUID(const int32 IsStatic);
 
+	void SanitizeObjectRefPath(improbable::unreal::UnrealObjectRef& ObjectRef);
+
 	TMap<FNetworkGUID, FHashableUnrealObjectRef> NetGUIDToUnrealObjectRef;
 	TMap<FHashableUnrealObjectRef, FNetworkGUID> UnrealObjectRefToNetGUID;
 };

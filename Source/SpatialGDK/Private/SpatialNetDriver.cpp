@@ -95,6 +95,34 @@ void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
 
 	checkf(!SpatialOSInstance->IsConnected(), TEXT("SpatialOS should not be connected already. This is probably because we attempted to travel to a different level, which current isn't supported."));
 
+	// TODO: factor this into helper method
+	// Check for command-line overrides.
+	{
+		FString ReceptionistHostOverride;
+		if (FParse::Value(FCommandLine::Get(), TEXT("receptionistIp"), ReceptionistHostOverride))
+		{
+			WorkerConfig.Networking.ReceptionistHost = ReceptionistHostOverride;
+		}
+	}
+
+	// Check for overrides in the travel URL.
+	if (!LoadedWorld->URL.Host.IsEmpty())
+	{
+		WorkerConfig.Networking.ReceptionistHost = LoadedWorld->URL.Host;
+		WorkerConfig.Networking.ReceptionistPort = LoadedWorld->URL.Port;
+	}
+
+	// Check if we need to use external IPs (if not connecting to localhost).
+	// TODO: make this override-able as well
+	if (WorkerConfig.Networking.ReceptionistHost.Compare(TEXT("127.0.0.1")) == 0)
+	{
+		WorkerConfig.Networking.UseExternalIp = false;
+	}
+	else
+	{
+		WorkerConfig.Networking.UseExternalIp = true;
+	}
+
 	// Set the timer manager.
 	TimerManager = &LoadedWorld->GetTimerManager();
 

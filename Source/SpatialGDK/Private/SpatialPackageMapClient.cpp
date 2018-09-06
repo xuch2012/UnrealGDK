@@ -1,5 +1,7 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
 
+#pragma optimize ( "", off )
+
 #include "SpatialPackageMapClient.h"
 #include "GameFramework/Actor.h"
 #include "EngineUtils.h"
@@ -223,19 +225,48 @@ void FSpatialNetGUIDCache::RemoveNetGUID(const FNetworkGUID& NetGUID)
 	NetGUIDToUnrealObjectRef.Remove(NetGUID);
 }
 
+void FSpatialNetGUIDCache::SanitizeObjectRefPath(improbable::unreal::UnrealObjectRef& ObjectRef)
+{
+	// If we have paths, network-sanitize all of them (e.g. removing PIE prefix).
+	if (!ObjectRef.path().empty())
+	{
+		improbable::unreal::UnrealObjectRef* Iterator = &ObjectRef;
+		while (true) {
+			if (Iterator->path().empty())
+			{
+				UE_LOG(LogSpatialOSPackageMap, Warning, TEXT("%s: SanitizeObjectRefPath found empty path"),
+					*Cast<USpatialNetDriver>(Driver)->GetSpatialOS()->GetWorkerId());
+			} else
+			{
+				FString TempPath(UTF8_TO_TCHAR(Iterator->path()->c_str()));
+				GEngine->NetworkRemapPath(Driver, TempPath, true);
+				Iterator->set_path(std::string(TCHAR_TO_UTF8(*TempPath)));
+			}
+			if (Iterator->outer().empty())
+			{
+				break;
+			}
+			Iterator = Iterator->outer().data();
+		}
+	}
+}
+
 FNetworkGUID FSpatialNetGUIDCache::GetNetGUIDFromUnrealObjectRef(const improbable::unreal::UnrealObjectRef& ObjectRef)
 {
-	FNetworkGUID* CachedGUID = UnrealObjectRefToNetGUID.Find(ObjectRef);
+	improbable::unreal::UnrealObjectRef SanitizedObjectRef = ObjectRef;
+	SanitizeObjectRefPath(SanitizedObjectRef);
+
+	FNetworkGUID* CachedGUID = UnrealObjectRefToNetGUID.Find(SanitizedObjectRef);
 	FNetworkGUID NetGUID = CachedGUID ? *CachedGUID : FNetworkGUID{};
-	if (!NetGUID.IsValid() && !ObjectRef.path().empty())
+	if (!NetGUID.IsValid() && !SanitizedObjectRef.path().empty())
 	{
 		FNetworkGUID OuterGUID;
-		if (!ObjectRef.outer().empty())
+		if (!SanitizedObjectRef.outer().empty())
 		{
-			OuterGUID = GetNetGUIDFromUnrealObjectRef(*ObjectRef.outer().data());
+			OuterGUID = GetNetGUIDFromUnrealObjectRef(*SanitizedObjectRef.outer().data());
 		}
-		NetGUID = RegisterNetGUIDFromPath(FString(ObjectRef.path().data()->c_str()), OuterGUID);
-		RegisterObjectRef(NetGUID, ObjectRef);
+		NetGUID = RegisterNetGUIDFromPath(FString(SanitizedObjectRef.path().data()->c_str()), OuterGUID);
+		RegisterObjectRef(NetGUID, SanitizedObjectRef);
 	}
 	return NetGUID;
 }
@@ -317,3 +348,5 @@ void FSpatialNetGUIDCache::RegisterObjectRef(FNetworkGUID NetGUID, const improba
 	NetGUIDToUnrealObjectRef.Emplace(NetGUID, ObjectRef);
 	UnrealObjectRefToNetGUID.Emplace(ObjectRef, NetGUID);
 }
+
+#pragma optimize ( "", on )

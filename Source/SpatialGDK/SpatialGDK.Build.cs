@@ -33,18 +33,23 @@ public class SpatialGDK : ModuleRules
                 "Core",
                 "CoreUObject",
                 "Engine",
+                "EngineSettings",
                 "OnlineSubsystemUtils",
                 "PhysXVehicles",
                 "InputCore",
                 "Sockets",
             });
 
-		// Check if we're building in the editor.
-		if (Target.bBuildEditor)
-		{
-			// Required by USpatialGameInstance::StartPlayInEditorGameInstance.
-			PublicDependencyModuleNames.Add("UnrealEd");
-		}
+        // Check if we're building in the editor.
+        if (Target.bBuildEditor)
+        {
+            // Required by USpatialGameInstance::StartPlayInEditorGameInstance.
+            PublicDependencyModuleNames.Add("UnrealEd");
+
+            // Add editor-specific code.
+            PublicIncludePaths.Add("SpatialGDK/Public/Editor");
+            PrivateIncludePaths.Add("SpatialGDK/Private/Editor");
+        }
 
    		var CoreSdkLibraryDir = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", "Binaries", "ThirdParty", "Improbable", Target.Platform.ToString()));
 
