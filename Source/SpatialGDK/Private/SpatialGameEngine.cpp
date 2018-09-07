@@ -3,6 +3,7 @@
 #include "SpatialGameEngine.h"
 
 #include "GameMapsSettings.h"
+#include "SpatialNetDriver.h"
 #include "SpatialPendingNetGame.h"
 
 
@@ -105,9 +106,27 @@ EBrowseReturnVal::Type USpatialGameEngine::Browse(FWorldContext& WorldContext, F
 			ShutdownWorldNetDriver(WorldContext.World());
 		}
 
-		//WorldContext.PendingNetGame = NewObject<UPendingNetGame>();
-		WorldContext.PendingNetGame = NewObject<USpatialPendingNetGame>();
+		// IMPROBABLE-BEGIN
+		WorldContext.PendingNetGame = NewObject<UPendingNetGame>();
 		WorldContext.PendingNetGame->Initialize(URL);
+
+		bool bIsSpatial = false;
+		if (GEngine->CreateNamedNetDriver(WorldContext.PendingNetGame, NAME_PendingNetDriver, NAME_GameNetDriver))
+		{
+			UNetDriver* TestNetDriver = GEngine->FindNamedNetDriver(WorldContext.PendingNetGame, NAME_PendingNetDriver);
+			WorldContext.PendingNetGame->NetDriver = TestNetDriver;
+			bIsSpatial = TestNetDriver->IsA(USpatialNetDriver::StaticClass());
+		}
+
+		// Create the proper PendingNetGame depending on what NetDriver we have loaded.
+		// This is required so that we don't break vanilla Unreal networking with SpatialOS switched off.
+		if (bIsSpatial)
+		{
+			WorldContext.PendingNetGame = NewObject<USpatialPendingNetGame>();
+			WorldContext.PendingNetGame->Initialize(URL);
+		}
+		// IMPROBABLE-END
+
 		WorldContext.PendingNetGame->InitNetDriver();
 		if (!WorldContext.PendingNetGame->NetDriver)
 		{
