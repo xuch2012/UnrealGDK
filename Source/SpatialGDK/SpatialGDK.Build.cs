@@ -21,8 +21,6 @@ public class SpatialGDK : ModuleRules
                 "SpatialGDK/Public/WorkerSdk",
                 "SpatialGDK/Generated/Cpp",
                 "SpatialGDK/Generated/UClasses",
-                "SpatialGDK/Legacy",
-                "SpatialGDK/Legacy/Deprecated"
             });
 
         PrivateIncludePaths.Add("SpatialGDK/Private");
@@ -47,8 +45,8 @@ public class SpatialGDK : ModuleRules
             PublicDependencyModuleNames.Add("UnrealEd");
 
             // Add editor-specific code.
-            PublicIncludePaths.Add("SpatialGDK/Public/Engine/SpatialEditorEngine.h");
-            PrivateIncludePaths.Add("SpatialGDK/Private/Engine/SpatialEditorEngine.cpp");
+            PublicIncludePaths.Add("SpatialGDK/Public/EngineClasses/SpatialEditorEngine.h");
+            PrivateIncludePaths.Add("SpatialGDK/Private/EngineClasses/SpatialEditorEngine.cpp");
         }
 
    		var CoreSdkLibraryDir = Path.GetFullPath(Path.Combine(ModuleDirectory, "..", "..", "Binaries", "ThirdParty", "Improbable", Target.Platform.ToString()));
