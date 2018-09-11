@@ -31,6 +31,9 @@ FString SchemaRPCComponentName(ERPCType RpcType, UStruct* Type, bool bPrependNam
 // For example: ServerMove() -> UnrealServerMoveRequest.
 FString SchemaRPCRequestType(UFunction* Function, bool bPrependNamespace = false);
 
+// Given an unreal type, generates the name of the component which is used for working sets.
+FString WorkingSetDataName(UStruct* Type, bool bPrependNamespace = false);
+
 // Given a UFunction, generates the command request data type.
 // For example: ServerMove() -> UnrealServerMoveResponse.
 FString SchemaRPCResponseType(UFunction* Function);

@@ -1,0 +1,9 @@
+// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+package improbable.unreal;
+
+component ChildInformation
+{
+    id = 100009;
+    int32 working_set_id = 1;
+    list<EntityId> children = 2;
+}

@@ -138,7 +138,7 @@ void WriteSchemaRPCField(TSharedPtr<FCodeWriter> Writer, const TSharedPtr<FUnrea
 	);
 }
 
-int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath)
+int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Class, TSharedPtr<FUnrealType> TypeInfo, FString SchemaPath, TArray<UClass*> WorkingSetClasses)
 {
 	FComponentIdGenerator IdGenerator(ComponentId);
 
@@ -213,6 +213,17 @@ int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Clas
 			FieldCounter);
 	}
 	Writer.Outdent().Print("}");
+
+	// Working set classes
+	if (WorkingSetClasses.Contains(Class))
+	{
+		Writer.Printf("component %s {", *WorkingSetDataName(Class));
+		Writer.Indent();
+		Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
+		Writer.Printf("uint32 working_set_id = 1;");
+		Writer.Printf("EntityId parent_id = 2;");
+		Writer.Outdent().Print("}");
+	}
 
 	// RPC components.
 	FUnrealRPCsByType RPCsByType = GetAllRPCsByType(TypeInfo);

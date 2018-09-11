@@ -29,7 +29,7 @@ void OnStatusOutput(FString Message)
 	UE_LOG(LogSpatialGDKInteropCodeGenerator, Log, TEXT("%s"), *Message);
 }
 
-int GenerateCompleteSchemaFromClass(const FString& SchemaPath, const FString& ForwardingCodePath, int ComponentId, UClass* Class)
+int GenerateCompleteSchemaFromClass(const FString& SchemaPath, const FString& ForwardingCodePath, int ComponentId, UClass* Class, const TArray<UClass*>& WorkingSetClasses)
 {
 	FCodeWriter OutputSchema;
 	FCodeWriter OutputHeader;
@@ -42,7 +42,7 @@ int GenerateCompleteSchemaFromClass(const FString& SchemaPath, const FString& Fo
 	TSharedPtr<FUnrealType> TypeInfo = CreateUnrealTypeInfo(Class, 0, 0, false);
 
 	// Generate schema.
-	int NumComponents = GenerateTypeBindingSchema(OutputSchema, ComponentId, Class, TypeInfo, SchemaPath);
+	int NumComponents = GenerateTypeBindingSchema(OutputSchema, ComponentId, Class, TypeInfo, SchemaPath, WorkingSetClasses);
 	OutputSchema.WriteToFile(FString::Printf(TEXT("%s%s.schema"), *SchemaPath, *SchemaFilename));
 
 	return NumComponents;
@@ -83,13 +83,13 @@ bool CheckClassNameListValidity(const TArray<UClass*>& Classes)
 }
 }// ::
 
-void GenerateInteropFromClasses(const TArray<UClass*>& Classes, const FString& CombinedSchemaPath, const FString& CombinedForwardingCodePath)
+void GenerateInteropFromClasses(const TArray<UClass*>& Classes, const FString& CombinedSchemaPath, const FString& CombinedForwardingCodePath, const TArray<UClass*>& WorkingSetClasses)
 {
 	// Component IDs 100000 to 100009 reserved for other SpatialGDK components.
 	int ComponentId = 100010;
 	for (const auto& Class : Classes)
 	{
-		ComponentId += GenerateCompleteSchemaFromClass(CombinedSchemaPath, CombinedForwardingCodePath, ComponentId, Class);
+		ComponentId += GenerateCompleteSchemaFromClass(CombinedSchemaPath, CombinedForwardingCodePath, ComponentId, Class, WorkingSetClasses);
 	}
 }
 
@@ -179,6 +179,7 @@ TArray<UClass*> GetAllSpatialTypeClasses()
 	return Classes;
 }
 
+
 TArray<UClass*> GetAllSupportedClasses()
 {
 	TArray<UClass*> Classes;
@@ -213,6 +214,23 @@ TArray<UClass*> GetAllSupportedClasses()
 	return Classes;
 }
 
+//Change this function once it is clear how we find out what a working set is
+bool IsValidWorkingSetClass(UClass *const& SpatialClass)
+{
+	return SpatialClass->GetName().Contains(TEXT("ProjectCharacter"))
+		|| SpatialClass->GetName().Contains(TEXT("Controller"))
+		|| SpatialClass->GetName().Contains(TEXT("PlayerState"));
+}
+
+TArray<UClass*> GetWorkingSetClasses(const TArray<UClass*>& SpatialClasses)
+{
+	return SpatialClasses.FilterByPredicate([](UClass *const SpatialClass)
+	{
+		return IsValidWorkingSetClass(SpatialClass);
+	});
+}
+
+
 bool SpatialGDKGenerateInteropCode()
 {
 	const USpatialGDKEditorToolbarSettings* SpatialGDKToolbarSettings = GetDefault<USpatialGDKEditorToolbarSettings>();
@@ -244,7 +262,8 @@ bool SpatialGDKGenerateInteropCode()
 
 	const FString SchemaIntermediatePath = GenerateIntermediateDirectory();
 	const FString InteropIntermediatePath = GenerateIntermediateDirectory();
-	GenerateInteropFromClasses(InteropGeneratedClasses, SchemaIntermediatePath, InteropIntermediatePath);
+
+	GenerateInteropFromClasses(InteropGeneratedClasses, SchemaIntermediatePath, InteropIntermediatePath, GetWorkingSetClasses(InteropGeneratedClasses));
 
 	const FString DiffCopyPath = FPaths::ConvertRelativePathToFull(FPaths::Combine(*FPaths::GetPath(FPaths::GetProjectFilePath()), TEXT("Scripts/DiffCopy.bat")));
 	// Copy Interop files.
