@@ -220,8 +220,7 @@ int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Clas
 		Writer.Printf("component %s {", *WorkingSetDataName(Class));
 		Writer.Indent();
 		Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
-		Writer.Printf("uint32 working_set_id = 1;");
-		Writer.Printf("EntityId parent_id = 2;");
+		Writer.Printf("EntityId parent_id = 1;");
 		Writer.Outdent().Print("}");
 	}
 
