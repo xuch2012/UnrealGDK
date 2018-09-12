@@ -23,7 +23,7 @@ void USpatialSender::Init(USpatialNetDriver* NetDriver)
 	Receiver = NetDriver->Receiver;
 }
 
-Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, const FVector& Location, const FString& EntityType, const FPropertyChangeState& InitialChanges, USpatialActorChannel* Channel, Worker_EntityId* WorkingSetParentId = nullptr)
+Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, const FVector& Location, const FString& EntityType, const FPropertyChangeState& InitialChanges, USpatialActorChannel* Channel, const Schema_EntityId* WorkingSetParentId = nullptr)
 {
 	AActor* Actor = Channel->Actor;
 
@@ -130,7 +130,7 @@ Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, con
 		WorkingSet.component_id = Info->WorkingSetComponent;
 		WorkingSet.schema_type = Schema_CreateComponentData(Info->WorkingSetComponent);
 		Schema_Object* ComponentObject = Schema_GetComponentDataFields(WorkingSet.schema_type);
-		Schema_AddEntityId(ComponentObject, 1, WorkingSetParentId);
+		Schema_AddEntityId(ComponentObject, 1, *WorkingSetParentId);
 		ComponentDatas.Add(WorkingSet);
 	}
 
@@ -310,7 +310,7 @@ Worker_RequestId USpatialSender::SendReserveEntityIdsRequest(const uint32 & NumO
 	return Connection->SendReserveEntityIdsRequest(NumOfEntities);
 }
 
-void USpatialSender::SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, Worker_EntityId* WorkingSetParentId = nullptr)
+void USpatialSender::SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, const Worker_EntityId* WorkingSetParentId = nullptr)
 {
 	UE_LOG(LogTemp, Log, TEXT("Sending create entity request for %s"), *Channel->Actor->GetName());
 
@@ -320,12 +320,18 @@ void USpatialSender::SendCreateEntityRequest(USpatialActorChannel* Channel, cons
 	Receiver->AddPendingActorRequest(RequestId, Channel);
 }
 
-void USpatialSender::SendCreateWorkingSetParentEntity(const Worker_EntityId& EntitiyId, const FVector& Location, const unit32& WorkingSetSize)
+void USpatialSender::SendCreateWorkingSetParentEntity(const Worker_EntityId& EntityId, const FVector& Location, const uint32& WorkingSetSize)
 {
-	Worker_Entity WorkingSetParentEntity;
-	WorkingSetParentEntity.entity_id = EntitiyId;
+	const WorkerAttributeSet UnrealWorkerAttributeSet{ TArray<FString>{TEXT("UnrealWorker")} };
+	const WorkerAttributeSet UnrealClientAttributeSet{ TArray<FString>{TEXT("UnrealClient")} };
 
-	Schema_Object* ComponentObject = Schema_GetComponentDataFields();
+	const WorkerRequirementSet UnrealWorkerPermission{ { UnrealWorkerAttributeSet } };
+	const WorkerRequirementSet UnrealClientPermission{ { UnrealClientAttributeSet } };
+	const WorkerRequirementSet AnyWorkerPermission{ { UnrealClientAttributeSet, UnrealWorkerAttributeSet } };
+
+	Worker_Entity WorkingSetParentEntity;
+	WorkingSetParentEntity.entity_id = EntityId;
+
 	TArray<Worker_ComponentData> Components;
 
 	WriteAclMap ComponentWriteAcl;
@@ -335,7 +341,7 @@ void USpatialSender::SendCreateWorkingSetParentEntity(const Worker_EntityId& Ent
 	ComponentWriteAcl.Add(UNREAL_METADATA_COMPONENT_ID, UnrealWorkerPermission);
 	ComponentWriteAcl.Add(ENTITY_ACL_COMPONENT_ID, UnrealWorkerPermission);
 
-	Components.Add(Coordinates::FromFVector(Location).CreatePositionData());
+	Components.Add(Position(Coordinates::FromFVector(Location)).CreatePositionData());
 	Components.Add(Metadata(TEXT("WorkingSetParent")).CreateMetadataData());
 	Components.Add(Persistence().CreatePersistenceData());
 	Components.Add(UnrealMetadata().CreateUnrealMetadataData());
@@ -346,7 +352,8 @@ void USpatialSender::SendCreateWorkingSetParentEntity(const Worker_EntityId& Ent
 	Data.component_id = SpatialConstants::WORKING_SET_COMPONENT_ID;
 	Data.schema_type = Schema_CreateComponentData(SpatialConstants::WORKING_SET_COMPONENT_ID);
 	Schema_Object* ComponentObject = Schema_GetComponentDataFields(Data.schema_type);
-	Schema_AddEntityIdList(ComponentObject, 1, EntityId, WorkingSetSize);
+	Schema_EntityId Id = static_cast<Schema_EntityId>(EntityId+1);
+	Schema_AddEntityIdList(ComponentObject, 1, &Id, WorkingSetSize);
 	Components.Add(Data);
 
 	Connection->SendCreateEntityRequest(Components.Num(), Components.GetData(), &EntityId);

@@ -9,6 +9,7 @@
 #include "EngineClasses/SpatialPackageMapClient.h"
 #include "Interop/SpatialTypebindingManager.h"
 #include "Schema/StandardLibrary.h"
+#include "WorkingSetManager.h"
 
 #include <improbable/c_schema.h>
 #include <improbable/c_worker.h>

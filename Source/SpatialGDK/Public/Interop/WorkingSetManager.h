@@ -23,7 +23,8 @@ UCLASS()
 class SPATIALGDK_API UWorkingSetManager : public UObject
 {
 	//useful for retrieving tuple elements
-	typedef TArray<TArray<uint16>> HandoverData, RepChangedData;
+	typedef TArray<TArray<uint16>> HandoverData;
+	typedef TArray<TArray<uint16>> RepChangedData;
 
 	typedef std::tuple<TArray<USpatialActorChannel*>, FVector, FString, RepChangedData, HandoverData> WorkingSetData;
 

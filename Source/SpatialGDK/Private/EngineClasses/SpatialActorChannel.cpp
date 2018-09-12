@@ -345,7 +345,7 @@ bool USpatialActorChannel::ReplicateActor()
 
 			// Calculate initial spatial position (but don't send component update) and create the entity.
 			LastSpatialPosition = GetActorSpatialPosition(Actor);
-			Sender->SendCreateEntityRequest(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged);
+			Sender->SendCreateEntityRequest(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, nullptr);
 		}
 		else
 		{

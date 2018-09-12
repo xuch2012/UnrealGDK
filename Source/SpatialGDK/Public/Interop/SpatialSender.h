@@ -54,8 +54,8 @@ public:
 
 	void SendReserveEntityIdRequest(USpatialActorChannel* Channel);
 	Worker_RequestId SendReserveEntityIdsRequest(const uint32& NumOfEntities);
-	void SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, Worker_EntityId* WorkingSetParentId);
-	void SendCreateWorkingSetParentEntity();
+	void SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, const Worker_EntityId* WorkingSetParentId);
+	void SendCreateWorkingSetParentEntity(const Worker_EntityId& EntitiyId, const FVector& Location, const uint32& WorkingSetSize);
 	void SendDeleteEntityRequest(Worker_EntityId EntityId);
 
 	void ResolveOutgoingOperations(UObject* Object);
@@ -63,7 +63,7 @@ public:
 
 private:
 	// Actor Lifecycle
-	Worker_RequestId CreateEntity(const FString& ClientWorkerId, const FVector& Position, const FString& Metadata, const FPropertyChangeState& InitialChanges, USpatialActorChannel* Channel, Worker_EntityId* WorkingSetParentId);
+	Worker_RequestId CreateEntity(const FString& ClientWorkerId, const FVector& Position, const FString& Metadata, const FPropertyChangeState& InitialChanges, USpatialActorChannel* Channel, const Worker_EntityId* WorkingSetParentId);
 
 	// Queuing
 	void ResetOutgoingRepUpdate(USpatialActorChannel* DependentChannel, UObject* ReplicatedObject, int16 Handle);
