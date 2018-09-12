@@ -688,6 +688,14 @@ void USpatialReceiver::OnReserveEntityIdResponse(Worker_ReserveEntityIdResponseO
 	}
 }
 
+void USpatialReceiver::OnReserveEntityIdsResponse(Worker_ReserveEntityIdsResponseOp & Op)
+{
+	UE_LOG(LogTemp, Log, TEXT("Received reserve entity Ids: request id: %d, number of entities: %lld"), Op.request_id, Op.number_of_entity_ids);
+	if (WorkingSetManager->IsRelevantRequest(Op.request_id)) {
+		WorkingSetManager->ProcessWorkingSet(Op.first_entity_id, Op.number_of_entity_ids, Op.request_id);
+	}
+}
+
 void USpatialReceiver::OnCreateEntityIdResponse(Worker_CreateEntityResponseOp& Op)
 {
 	if (USpatialActorChannel* Channel = PopPendingActorRequest(Op.request_id))

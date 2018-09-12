@@ -17,6 +17,7 @@
 
 class USpatialSender;
 class UGlobalStateManager;
+class UWorkingSetManager;
 
 using FChannelObjectPair = TPair<USpatialActorChannel*, UObject*>;
 using FUnresolvedObjectsMap = TMap<Schema_FieldId, TSet<const UObject*>>;
@@ -92,6 +93,7 @@ public:
 	void OnCommandResponse(Worker_CommandResponseOp& Op);
 
 	void OnReserveEntityIdResponse(Worker_ReserveEntityIdResponseOp& Op);
+	void OnReserveEntityIdsResponse(Worker_ReserveEntityIdsResponseOp& Op);
 	void OnCreateEntityIdResponse(Worker_CreateEntityResponseOp& Op);
 	void AddPendingActorRequest(Worker_RequestId RequestId, USpatialActorChannel* Channel);
 
@@ -134,6 +136,7 @@ private:
 	UWorld* World;
 	USpatialTypebindingManager* TypebindingManager;
 	UGlobalStateManager* GlobalStateManager;
+	UWorkingSetManager* WorkingSetManager;
 
 	// TODO: Figure out how to remove entries when Channel/Actor gets deleted
 	TMap<UnrealObjectRef, TSet<FChannelObjectPair>> IncomingRefsMap;

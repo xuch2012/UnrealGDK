@@ -3,8 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "SpatialSender.h"
 #include "SpatialActorChannel.h"
+#include "SpatialSender.h"
 #include <tuple>
 #include "WorkingSetManager.generated.h"
 
@@ -22,7 +22,10 @@ struct FWorkingSet
 UCLASS()
 class SPATIALGDK_API UWorkingSetManager : public UObject
 {
-	typedef std::tuple<TArray<USpatialActorChannel*>, FVector, FString, TArray<TArray<uint16>>, TArray<TArray<uint16>>> WorkingSetData;
+	//useful for retrieving tuple elements
+	typedef TArray<TArray<uint16>> HandoverData, RepChangedData;
+
+	typedef std::tuple<TArray<USpatialActorChannel*>, FVector, FString, RepChangedData, HandoverData> WorkingSetData;
 
 	GENERATED_BODY()
 
@@ -30,13 +33,15 @@ public:
 
 	// Working set initialization
 	void CreateWorkingSet(TArray<USpatialActorChannel*> Channels, const FVector& Location, const FString& PlayerWorkerId, const TArray<TArray<uint16>>& RepChanged, const TArray<TArray<uint16>>& HandoverChanged);
+	bool IsRelevantRequest(const Worker_RequestId& RequestId);
+	void ProcessWorkingSet(const Worker_EntityId& FirstId, const uint32& NumOfEntities, const Worker_RequestId& RequestId);
 
 private:
-	
+
 
 private:
 	 
 	USpatialSender* Sender;
-	TArray<FWorkingSet> CurrentWorkingSets;
+	TMap<UActorChannel*, FWorkingSet> CurrentWorkingSets;
 	TMap<Worker_RequestId, WorkingSetData> PendingWorkingSetCreationRequests;
 };

@@ -88,6 +88,9 @@ void USpatialTypebindingManager::CreateTypebindings()
 		Info.HandoverComponent = SchemaDatabase->ClassToSchema[Class].HandoverData;
 		ComponentToClassMap.Add(Info.HandoverComponent, Class);
 
+		Info.WorkingSetComponent = SchemaDatabase->ClassToSchema[Class].WorkingSetData;
+		ComponentToClassMap.Add(Info.WorkingSetComponent, Class);
+
 		Info.RPCComponents[RPC_Client] = SchemaDatabase->ClassToSchema[Class].ClientRPCs;
 		ComponentToClassMap.Add(Info.RPCComponents[RPC_Client], Class);
 

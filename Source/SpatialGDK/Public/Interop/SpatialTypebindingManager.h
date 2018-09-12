@@ -54,6 +54,7 @@ struct FClassInfo
 	Worker_ComponentId MultiClientComponent;
 	Worker_ComponentId HandoverComponent;
 	Worker_ComponentId RPCComponents[RPC_Count];
+	Worker_ComponentId WorkingSetComponent;
 
 	TSet<UClass*> SubobjectClasses;
 };
