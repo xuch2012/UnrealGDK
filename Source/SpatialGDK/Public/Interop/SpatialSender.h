@@ -3,15 +3,16 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
 #include "Utils/RepDataUtils.h"
 
 #include <improbable/c_schema.h>
 #include <improbable/c_worker.h>
 
+
 #include "SpatialSender.generated.h"
 
 class USpatialNetDriver;
+class UWorkingSetManager;
 class USpatialWorkerConnection;
 class USpatialActorChannel;
 class USpatialPackageMapClient;
@@ -52,6 +53,7 @@ public:
 	void SendCommandResponse(Worker_RequestId request_id, Worker_CommandResponse& Response);
 
 	void SendReserveEntityIdRequest(USpatialActorChannel* Channel);
+	Worker_RequestId SendReserveEntityIdsRequest(const uint32& NumOfEntities);
 	void SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged);
 	void SendDeleteEntityRequest(Worker_EntityId EntityId);
 
@@ -77,6 +79,7 @@ private:
 	USpatialReceiver* Receiver;
 	USpatialPackageMapClient* PackageMap;
 	USpatialTypebindingManager* TypebindingManager;
+	UWorkingSetManager* WorkingSetManager;
 
 	FChannelToHandleToUnresolved PropertyToUnresolved;
 	FOutgoingRepUpdates ObjectToUnresolved;

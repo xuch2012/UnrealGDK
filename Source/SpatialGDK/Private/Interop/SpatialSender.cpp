@@ -291,6 +291,12 @@ void USpatialSender::SendReserveEntityIdRequest(USpatialActorChannel* Channel)
 	Receiver->AddPendingActorRequest(RequestId, Channel);
 }
 
+Worker_RequestId USpatialSender::SendReserveEntityIdsRequest(const uint32 & NumOfEntities)
+{
+	UE_LOG(LogTemp, Log, TEXT("Sending reserve entity Ids request for %d channels"), NumOfEntities);
+	return Connection->SendReserveEntityIdsRequest(NumOfEntities);
+}
+
 void USpatialSender::SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged)
 {
 	UE_LOG(LogTemp, Log, TEXT("Sending create entity request for %s"), *Channel->Actor->GetName());
