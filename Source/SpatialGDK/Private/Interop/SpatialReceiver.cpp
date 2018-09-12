@@ -103,6 +103,15 @@ void USpatialReceiver::OnAddComponent(Worker_AddComponentOp& Op)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Unsupported dynamic add component op received - component ID: %u entity ID: %lld"),
 			Op.data.component_id, Op.entity_id);
+
+		if (!NetDriver->IsServer())
+		{
+			USpatialActorChannel* ActorChannel = NetDriver->GetActorChannelByEntityId(Op.entity_id);
+			UClass* NewComponentClass = TypebindingManager->FindClassByComponentId(Op.data.component_id);
+			UActorComponent* NewComponent = NewObject<UActorComponent>(ActorChannel->Actor, NewComponentClass);
+			NewComponent->RegisterComponent();
+		}
+
 		return;
 	}
 
