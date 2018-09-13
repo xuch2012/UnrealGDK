@@ -15,6 +15,8 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSpatialGDKActorChannel, Log, All);
 
+class UWorkingSetManager;
+
 UCLASS(Transient)
 class SPATIALGDK_API USpatialActorChannel : public UActorChannel
 {
@@ -153,6 +155,8 @@ private:
 	FVector LastSpatialPosition;
 
 	TArray<uint8> HandoverPropertyShadowData;
+
+	UWorkingSetManager* WorkingSetManager;
 
 	// If this actor channel is responsible for creating a new entity, this will be set to true during initial replication.
 	UPROPERTY(Transient)

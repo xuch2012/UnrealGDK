@@ -60,7 +60,6 @@ Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, con
 	ComponentWriteAcl.Add(Info->SingleClientComponent, WorkersOnly);
 	ComponentWriteAcl.Add(Info->MultiClientComponent, WorkersOnly);
 	ComponentWriteAcl.Add(Info->HandoverComponent, WorkersOnly);
-	ComponentWriteAcl.Add(Info->WorkingSetComponent, WorkersOnly);
 	ComponentWriteAcl.Add(Info->RPCComponents[RPC_Client], OwningClientOnly);
 	ComponentWriteAcl.Add(Info->RPCComponents[RPC_Server], WorkersOnly);
 	ComponentWriteAcl.Add(Info->RPCComponents[RPC_CrossServer], WorkersOnly);
@@ -102,7 +101,6 @@ Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, con
 	TArray<Worker_ComponentData> ComponentDatas;
 	ComponentDatas.Add(Position(Coordinates::FromFVector(Location)).CreatePositionData());
 	ComponentDatas.Add(Metadata(EntityType).CreateMetadataData());
-	ComponentDatas.Add(EntityAcl(ReadAcl, ComponentWriteAcl).CreateEntityAclData());
 	ComponentDatas.Add(Persistence().CreatePersistenceData());
 	ComponentDatas.Add(UnrealMetadata(StaticPath, ClientWorkerId, SubobjectNameToOffset).CreateUnrealMetadataData());
 
@@ -124,16 +122,18 @@ Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, con
 	ComponentDatas.Add(HandoverData);
 
 	// Working set data
-	if (WorkingSetParentId)
-	{
+ 	if (WorkingSetParentId)
+ 	{
+		ComponentWriteAcl.Add(Info->WorkingSetComponent, WorkersOnly);
 		Worker_ComponentData WorkingSet = {};
-		WorkingSet.component_id = Info->WorkingSetComponent;
+ 		WorkingSet.component_id = Info->WorkingSetComponent;
 		WorkingSet.schema_type = Schema_CreateComponentData(Info->WorkingSetComponent);
 		Schema_Object* ComponentObject = Schema_GetComponentDataFields(WorkingSet.schema_type);
 		Schema_AddEntityId(ComponentObject, 1, *WorkingSetParentId);
 		ComponentDatas.Add(WorkingSet);
-	}
+ 	}
 
+	ComponentDatas.Add(EntityAcl(ReadAcl, ComponentWriteAcl).CreateEntityAclData());
 
 	for (int RPCType = 0; RPCType < RPC_Count; RPCType++)
 	{
