@@ -42,21 +42,17 @@ void ComponentReader::ApplyComponentUpdate(const Worker_ComponentUpdate& Compone
 	ClearedIds.SetNum(Schema_GetComponentUpdateClearedFieldCount(ComponentUpdate.schema_type));
 	Schema_GetComponentUpdateClearedFieldList(ComponentUpdate.schema_type, ClearedIds.GetData());
 
-	FObjectReplicator& Replicator = Channel->PreReceiveSpatialUpdate(Object);
-
 	if (bIsHandover)
 	{
 		ApplyHandoverSchemaObject(ComponentObject, Object, Channel, false, &ClearedIds);
-		Channel->PostReceiveSpatialUpdate(Object, TArray<UProperty*>());
 	}
 	else
 	{
-		TArray<UProperty*> RepNotifies = ApplySchemaObject(ComponentObject, Object, Channel, false, &ClearedIds);
-		Channel->PostReceiveSpatialUpdate(Object, RepNotifies);
+		ApplySchemaObject(ComponentObject, Object, Channel, false, &ClearedIds);
 	}
 }
 
-TArray<UProperty*> ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject* Object, USpatialActorChannel* Channel, bool bIsInitialData, TArray<Schema_FieldId>* ClearedIds)
+void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject* Object, USpatialActorChannel* Channel, bool bIsInitialData, TArray<Schema_FieldId>* ClearedIds)
 {
 	bool bAutonomousProxy = Channel->IsClientAutonomousProxy();
 
@@ -66,8 +62,10 @@ TArray<UProperty*> ComponentReader::ApplySchemaObject(Schema_Object* ComponentOb
 
 	if (UpdateFields.Num() == 0)
 	{
-		return TArray<UProperty*>();
+		return;
 	}
+
+	FObjectReplicator& Replicator = Channel->PreReceiveSpatialUpdate(Object);
 
 	FRepState* RepState = Replicator.RepState;
 	TArray<FRepLayoutCmd>& Cmds = Replicator.RepLayout->Cmds;
@@ -127,7 +125,10 @@ TArray<UProperty*> ComponentReader::ApplySchemaObject(Schema_Object* ComponentOb
 		}
 	}
 
-	return RepNotifies;
+	if(!bIsInitialData)
+	{
+		Channel->PostReceiveSpatialUpdate(Object, RepNotifies);
+	}
 }
 
 void ComponentReader::ApplyHandoverSchemaObject(Schema_Object* ComponentObject, UObject* Object, USpatialActorChannel* Channel, bool bIsInitialData, TArray<Schema_FieldId>* ClearedIds)
@@ -143,6 +144,8 @@ void ComponentReader::ApplyHandoverSchemaObject(Schema_Object* ComponentObject, 
 
 	FClassInfo* ClassInfo = TypebindingManager->FindClassInfoByClass(Object->GetClass());
 	check(ClassInfo);
+
+	Channel->PreReceiveSpatialUpdate(Object);
 
 	for (std::uint32_t FieldId : UpdateFields)
 	{
@@ -163,6 +166,11 @@ void ComponentReader::ApplyHandoverSchemaObject(Schema_Object* ComponentObject, 
 				ApplyProperty(ComponentObject, FieldId, 0, PropertyInfo.Property, Data, PropertyInfo.Offset, -1);
 			}
 		}
+	}
+
+	if(!bIsInitialData)
+	{
+		Channel->PostReceiveSpatialUpdate(Object, TArray<UProperty*>());
 	}
 }
 
