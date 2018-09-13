@@ -18,6 +18,7 @@ class USpatialWorkerConnection : public UObject
 public:
 	virtual void FinishDestroy() override;
 
+	// Connects to either the Receptionist or the Locator, depending on whether a login token was supplied.
 	void Connect(bool bConnectAsClient);
 
 	bool IsConnected();
@@ -34,8 +35,15 @@ public:
 
 	OnConnectedDelegate OnConnected;
 
+	// Rebase - made public.
+	FReceptionistConfig ReceptionistConfig;
+	FLocatorConfig LocatorConfig;
+
 private:
+	// Connects directly to the receptionist using the values in ReceptionistConfig.
 	void ConnectToReceptionist(bool bConnectAsClient);
+
+	// Connects directly to the locator using the values in LocatorConfig.
 	void ConnectToLocator();
 
 	Worker_ConnectionParameters CreateConnectionParameters(FConnectionConfig& Config);
@@ -44,9 +52,6 @@ private:
 private:
 	Worker_Connection* WorkerConnection;
 	Worker_Locator* WorkerLocator;
-
-	FReceptionistConfig ReceptionistConfig;
-	FLocatorConfig LocatorConfig;
 
 	bool bIsConnected;
 };

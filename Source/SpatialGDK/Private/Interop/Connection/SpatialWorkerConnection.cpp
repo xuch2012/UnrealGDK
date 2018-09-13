@@ -157,9 +157,7 @@ void USpatialWorkerConnection::ConnectToLocator()
 
 bool USpatialWorkerConnection::ShouldConnectWithLocator()
 {
-	const TCHAR* CommandLine = FCommandLine::Get();
-	FString TempStr;
-	return FParse::Value(CommandLine, *FString("loginToken"), TempStr);
+	return !LocatorConfig.LoginToken.IsEmpty();
 }
 
 bool USpatialWorkerConnection::IsConnected()

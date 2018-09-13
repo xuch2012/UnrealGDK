@@ -10,7 +10,7 @@
 
 //UPendingNetGame needs to have its dllexport defined: "class ENGINE_API UPendingNetGame". This can count as a bug, we can submit a PR.
 UCLASS(transient)
-class USpatialPendingNetGame : public UPendingNetGame
+class SPATIALGDK_API USpatialPendingNetGame : public UPendingNetGame
 {
 	GENERATED_UCLASS_BODY()
 		

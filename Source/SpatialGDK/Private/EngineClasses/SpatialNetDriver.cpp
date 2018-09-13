@@ -93,6 +93,42 @@ void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
 
 	//checkf(!SpatialOSInstance->IsConnected(), TEXT("SpatialOS should not be connected already. This is probably because we attempted to travel to a different level, which current isn't supported."));
 
+	// Rebase - Moved this earlier to allow modding the receptionist config based on the loaded world.
+	if (Connection != nullptr)
+	{
+		return;
+	}
+	Connection = NewObject<USpatialWorkerConnection>();
+	// Rebase - End
+
+	bool bUseLocator = LoadedWorld->URL.HasOption(TEXT("spatialLocator"));
+
+	if (bUseLocator)
+	{
+		Connection->LocatorConfig.ProjectName = LoadedWorld->URL.GetOption(TEXT("project"), TEXT(""));
+		Connection->LocatorConfig.LoginToken = LoadedWorld->URL.GetOption(TEXT("token"), TEXT(""));
+	}
+	else
+	{
+		// Check for overrides in the travel URL.
+		if (!LoadedWorld->URL.Host.IsEmpty())
+		{
+			Connection->ReceptionistConfig.ReceptionistHost = LoadedWorld->URL.Host;
+			Connection->ReceptionistConfig.ReceptionistPort = LoadedWorld->URL.Port;
+		}
+
+		// Check if we need to use external IPs (if not connecting to localhost).
+		// TODO: make this override-able as well
+		if (Connection->ReceptionistConfig.ReceptionistHost.Compare(TEXT("127.0.0.1")) == 0)
+		{
+			Connection->ReceptionistConfig.UseExternalIp = false;
+		}
+		else
+		{
+			Connection->ReceptionistConfig.UseExternalIp = true;
+		}
+	}
+
 	// Set the timer manager.
 	TimerManager = &LoadedWorld->GetTimerManager();
 
@@ -105,12 +141,6 @@ void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
 
 void USpatialNetDriver::Connect()
 {
-	if (Connection != nullptr)
-	{
-		return;
-	}
-
-	Connection = NewObject<USpatialWorkerConnection>();
 	Connection->OnConnected.BindUFunction(this, FName("OnConnected"));
 
 	Connection->Connect(bConnectAsClient);
