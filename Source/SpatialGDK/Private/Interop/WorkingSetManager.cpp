@@ -2,10 +2,13 @@
 
 #include "WorkingSetManager.h"
 
-UWorkingSetManager::UWorkingSetManager()
+void UWorkingSetManager::Init(USpatialNetDriver* NetDriver)
 {
 	// local working set id initialization
-	CurrentWorkingSetId = 0;
+	CurrentWorkingSetId = 1;
+	this->NetDriver = NetDriver;
+	Sender = NetDriver->Sender;
+	
 }
 
 void UWorkingSetManager::CreateWorkingSet(TArray<USpatialActorChannel*> Channels, const FVector& Location, const FString& PlayerWorkerId, const TArray<TArray<uint16>>& RepChanged, const TArray<TArray<uint16>>& HandoverChanged)
@@ -45,9 +48,9 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 		//Todo: async exec
 		Sender->SendCreateWorkingSetParentEntity(FirstId, Location, NumOfEntities);
 
-		for (uint32 i = 0; i < NumOfEntities; i++) {
+		for (uint32 i = 0; i < NumOfEntities-1; i++) {
 			USpatialActorChannel* ActorChannel = ActorChannels[i];
-			ActorChannel->SetEntityId(FirstId+i+1);
+			ActorChannel->SetEntityId(FirstId + i + 1);
 			CurrentWorkingSets.Add(ActorChannel, WorkingSet);
 			Sender->SendCreateEntityRequest(ActorChannel,
 				Location,
@@ -61,17 +64,34 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 	}
 }
 
+// Todo: be able to have automatic working set creations
+uint32 UWorkingSetManager::GetWorkingSetSize(const uint32 & WorkingSetId)
+{
+	if (PendingWorkingSets.Contains(WorkingSetId)) {
+		return PendingWorkingSets.Find(WorkingSetId)->ActorChannels.Num();
+	}
+
+	return 0;
+}
+
 // Register working set
 uint32 UWorkingSetManager::RegisterNewWorkingSet()
 {
+	// hacky workaround for testing
+	if (PendingWorkingSets.Contains(CurrentWorkingSetId))
+	{
+		return CurrentWorkingSetId;
+	}
+
 	TArray<USpatialActorChannel*> ActorChannels;
 	FVector Location;
 	FString PlayerWorkerId;
 	TArray<TArray<uint16>> RepChangedData;
 	TArray<TArray<uint16>> HandoverData;
 
+	//CurrentWorkingSetId++;
 	PendingWorkingSets.Add(CurrentWorkingSetId, { ActorChannels, Location, PlayerWorkerId, RepChangedData, HandoverData });
-	return CurrentWorkingSetId++;
+	return CurrentWorkingSetId;
 }
 
 //todo

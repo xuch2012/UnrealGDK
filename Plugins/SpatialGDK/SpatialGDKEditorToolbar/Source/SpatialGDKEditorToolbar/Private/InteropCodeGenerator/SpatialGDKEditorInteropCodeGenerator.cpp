@@ -123,6 +123,22 @@ FString GenerateIntermediateDirectory()
 	return AbsoluteCombinedIntermediatePath;
 }
 
+//Change this function once it is clear how we find out what a working set is
+bool IsValidWorkingSetClass(UClass *const& SpatialClass)
+{
+	return SpatialClass->GetName().Contains(TEXT("ProjectCharacter"))
+		|| SpatialClass->GetName().Contains(TEXT("Controller"))
+		|| SpatialClass->GetName().Contains(TEXT("PlayerState"));
+}
+
+TArray<UClass*> GetWorkingSetClasses(const TArray<UClass*>& SpatialClasses)
+{
+	return SpatialClasses.FilterByPredicate([](UClass *const SpatialClass)
+	{
+		return IsValidWorkingSetClass(SpatialClass);
+	});
+}
+
 void CreateSchemaDatabase(TArray<UClass*> Classes)
 {
 	AsyncTask(ENamedThreads::GameThread, [Classes]{
@@ -139,6 +155,10 @@ void CreateSchemaDatabase(TArray<UClass*> Classes)
 			SchemaData.SingleClientRepData = ComponentId++;
 			SchemaData.MultiClientRepData = ComponentId++;
 			SchemaData.HandoverData = ComponentId++;
+			if (IsValidWorkingSetClass(Class))
+			{
+				SchemaData.WorkingSetData = ComponentId++;
+			}
 			SchemaData.ClientRPCs = ComponentId++;
 			SchemaData.ServerRPCs = ComponentId++;
 			SchemaData.CrossServerRPCs = ComponentId++;
@@ -213,23 +233,6 @@ TArray<UClass*> GetAllSupportedClasses()
 
 	return Classes;
 }
-
-//Change this function once it is clear how we find out what a working set is
-bool IsValidWorkingSetClass(UClass *const& SpatialClass)
-{
-	return SpatialClass->GetName().Contains(TEXT("ProjectCharacter"))
-		|| SpatialClass->GetName().Contains(TEXT("Controller"))
-		|| SpatialClass->GetName().Contains(TEXT("PlayerState"));
-}
-
-TArray<UClass*> GetWorkingSetClasses(const TArray<UClass*>& SpatialClasses)
-{
-	return SpatialClasses.FilterByPredicate([](UClass *const SpatialClass)
-	{
-		return IsValidWorkingSetClass(SpatialClass);
-	});
-}
-
 
 bool SpatialGDKGenerateInteropCode()
 {

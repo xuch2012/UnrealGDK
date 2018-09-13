@@ -150,16 +150,18 @@ private:
 	class USpatialSender* Sender;
 
 	UPROPERTY(transient)
+	class UWorkingSetManager* WorkingSetManager;
+
+	UPROPERTY(transient)
 	class USpatialReceiver* Receiver;
 
 	FVector LastSpatialPosition;
 
 	TArray<uint8> HandoverPropertyShadowData;
 
-	UWorkingSetManager* WorkingSetManager;
-
 	// If this actor channel is responsible for creating a new entity, this will be set to true during initial replication.
 	UPROPERTY(Transient)
 	bool bCreatingNewEntity;
 
+	int32 WorkingSetId;
 };

@@ -41,6 +41,7 @@ void USpatialReceiver::Init(USpatialNetDriver* InNetDriver)
 	World = InNetDriver->GetWorld();
 	TypebindingManager = InNetDriver->TypebindingManager;
 	GlobalStateManager = InNetDriver->GlobalStateManager;
+	WorkingSetManager = InNetDriver->WorkingSetManager;
 }
 
 void USpatialReceiver::OnCriticalSection(bool InCriticalSection)

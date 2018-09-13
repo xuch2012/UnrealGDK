@@ -5,10 +5,10 @@
 #include "CoreMinimal.h"
 #include "SpatialActorChannel.h"
 #include "SpatialSender.h"
-#include <tuple>
 #include "WorkingSetManager.generated.h"
 
 class USpatialSender;
+class USpatialNetDriver;
 
 USTRUCT()
 struct FWorkingSet
@@ -39,13 +39,14 @@ class SPATIALGDK_API UWorkingSetManager : public UObject
 	GENERATED_BODY()
 
 public:
-	UWorkingSetManager();
 
+	void Init(USpatialNetDriver* NetDriver);
 	// Working set initialization
 	void CreateWorkingSet(TArray<USpatialActorChannel*> Channels, const FVector& Location, const FString& PlayerWorkerId, const TArray<TArray<uint16>>& RepChanged, const TArray<TArray<uint16>>& HandoverChanged);
 	void CreateWorkingSet(const uint32& WorkingSetId);
 	bool IsRelevantRequest(const Worker_RequestId& RequestId);
 	void ProcessWorkingSet(const Worker_EntityId& FirstId, const uint32& NumOfEntities, const Worker_RequestId& RequestId);
+	uint32 GetWorkingSetSize(const uint32& WorkingSetId);
 	uint32 RegisterNewWorkingSet();
 	void EnqueueForWorkingSet(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, const uint32& WorkingSetId);
 
@@ -55,8 +56,10 @@ private:
 private:
 	 
 	USpatialSender* Sender;
+	USpatialNetDriver* NetDriver;
 	TMap<UActorChannel*, FWorkingSet> CurrentWorkingSets;
 	TMap<Worker_RequestId, FWorkingSetData> PendingWorkingSetCreationRequests;
 	TMap<uint32, FWorkingSetData> PendingWorkingSets;
 	uint32 CurrentWorkingSetId;
+
 };

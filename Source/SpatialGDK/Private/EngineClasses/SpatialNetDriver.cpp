@@ -123,6 +123,7 @@ void USpatialNetDriver::OnConnected()
 	View = NewObject<USpatialView>();
 	Sender = NewObject<USpatialSender>();
 	Receiver = NewObject<USpatialReceiver>();
+	WorkingSetManager = NewObject<UWorkingSetManager>();
 	GlobalStateManager = NewObject<UGlobalStateManager>();
 	PlayerSpawner = NewObject<USpatialPlayerSpawner>();
 
@@ -163,6 +164,7 @@ void USpatialNetDriver::OnConnected()
 	View->Init(this);
 	Sender->Init(this);
 	Receiver->Init(this);
+	WorkingSetManager->Init(this);
 	GlobalStateManager->Init(this);
 }
 

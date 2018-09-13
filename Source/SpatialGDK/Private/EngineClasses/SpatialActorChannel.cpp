@@ -60,6 +60,7 @@ USpatialActorChannel::USpatialActorChannel(const FObjectInitializer& ObjectIniti
 {
 	bCoreActor = true;
 	bCreatingNewEntity = false;
+	WorkingSetId = -1;
 }
 
 void USpatialActorChannel::Init(UNetConnection* InConnection, int32 ChannelIndex, bool bOpenedLocally)
@@ -70,6 +71,7 @@ void USpatialActorChannel::Init(UNetConnection* InConnection, int32 ChannelIndex
 	check(NetDriver);
 	Sender = NetDriver->Sender;
 	Receiver = NetDriver->Receiver;
+	WorkingSetManager = NetDriver->WorkingSetManager;
 }
 
 void USpatialActorChannel::DeleteEntityIfAuthoritative()
@@ -345,7 +347,18 @@ bool USpatialActorChannel::ReplicateActor()
 
 			// Calculate initial spatial position (but don't send component update) and create the entity.
 			LastSpatialPosition = GetActorSpatialPosition(Actor);
-			Sender->SendCreateEntityRequest(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, nullptr);
+			if (WorkingSetId < 0)
+			{
+				WorkingSetId = WorkingSetManager->RegisterNewWorkingSet();
+			}
+
+			WorkingSetManager->EnqueueForWorkingSet(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, WorkingSetId);
+
+			if (WorkingSetManager->GetWorkingSetSize(WorkingSetId) == 3)
+			{
+				WorkingSetManager->CreateWorkingSet(WorkingSetId);
+			}
+			//Sender->SendCreateEntityRequest(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, nullptr);
 		}
 		else
 		{

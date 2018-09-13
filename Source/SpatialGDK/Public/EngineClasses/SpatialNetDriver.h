@@ -22,6 +22,7 @@ class USpatialWorkerConnection;
 class USpatialView;
 class USpatialSender;
 class USpatialReceiver;
+class UWorkingSetManager;
 class USpatialTypebindingManager;
 class UGlobalStateManager;
 class USpatialPlayerSpawner;
@@ -92,6 +93,8 @@ public:
 	USpatialSender* Sender;
 	UPROPERTY()
 	USpatialReceiver* Receiver;
+	UPROPERTY()
+	UWorkingSetManager* WorkingSetManager;
 	UPROPERTY()
 	USpatialTypebindingManager* TypebindingManager;
 	UPROPERTY()

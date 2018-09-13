@@ -63,7 +63,7 @@ public:
 
 private:
 	// Actor Lifecycle
-	Worker_RequestId CreateEntity(const FString& ClientWorkerId, const FVector& Position, const FString& Metadata, const FPropertyChangeState& InitialChanges, USpatialActorChannel* Channel, const Worker_EntityId* WorkingSetParentId);
+	Worker_RequestId CreateEntity(const FString& ClientWorkerId, const FVector& Location, const FString& EntityType, const FPropertyChangeState& InitialChanges, USpatialActorChannel* Channel, const Schema_EntityId* WorkingSetParentId);
 
 	// Queuing
 	void ResetOutgoingRepUpdate(USpatialActorChannel* DependentChannel, UObject* ReplicatedObject, int16 Handle);

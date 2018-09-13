@@ -27,6 +27,13 @@ void USpatialTypebindingManager::Init()
 	CreateTypebindings();
 }
 
+//Change this function once it is clear how we find out what a working set is
+bool USpatialTypebindingManager::IsValidWorkingSetClass(UClass *const& SpatialClass)
+{
+	return SpatialClass->GetName().Contains(TEXT("ProjectCharacter"))
+		|| SpatialClass->GetName().Contains(TEXT("Controller"))
+		|| SpatialClass->GetName().Contains(TEXT("PlayerState"));
+}
 void USpatialTypebindingManager::FindSupportedClasses()
 {
 	SchemaDatabase->ClassToSchema.GetKeys(SupportedClasses);
@@ -88,8 +95,11 @@ void USpatialTypebindingManager::CreateTypebindings()
 		Info.HandoverComponent = SchemaDatabase->ClassToSchema[Class].HandoverData;
 		ComponentToClassMap.Add(Info.HandoverComponent, Class);
 
-		Info.WorkingSetComponent = SchemaDatabase->ClassToSchema[Class].WorkingSetData;
-		ComponentToClassMap.Add(Info.WorkingSetComponent, Class);
+		if(IsValidWorkingSetClass(Class))
+		{
+			Info.WorkingSetComponent = SchemaDatabase->ClassToSchema[Class].WorkingSetData;
+			ComponentToClassMap.Add(Info.WorkingSetComponent, Class);
+		}
 
 		Info.RPCComponents[RPC_Client] = SchemaDatabase->ClassToSchema[Class].ClientRPCs;
 		ComponentToClassMap.Add(Info.RPCComponents[RPC_Client], Class);
