@@ -130,6 +130,8 @@ private:
 	void DeleteEntityIfAuthoritative();
 	bool IsSingletonEntity();
 
+	bool IsAValidWorkingSet(UClass* Class);
+
 	void UpdateSpatialPosition();
 
 	FVector GetActorSpatialPosition(AActor* Actor);

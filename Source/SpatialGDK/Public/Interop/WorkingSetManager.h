@@ -41,9 +41,14 @@ class SPATIALGDK_API UWorkingSetManager : public UObject
 public:
 
 	void Init(USpatialNetDriver* NetDriver);
+
 	// Working set initialization
 	void CreateWorkingSet(TArray<USpatialActorChannel*> Channels, const FVector& Location, const TArray<FString>& PlayerWorkerId, const TArray<TArray<uint16>>& RepChanged, const TArray<TArray<uint16>>& HandoverChanged);
 	void CreateWorkingSet(const uint32& WorkingSetId);
+
+	// updates
+	void SendPositionUpdate(const USpatialActorChannel* ActorChannel, const FVector& Loction);
+
 	bool IsRelevantRequest(const Worker_RequestId& RequestId);
 	void ProcessWorkingSet(const Worker_EntityId& FirstId, const uint32& NumOfEntities, const Worker_RequestId& RequestId);
 	uint32 GetWorkingSetSize(const uint32& WorkingSetId);
@@ -57,7 +62,7 @@ private:
 	 
 	USpatialSender* Sender;
 	USpatialNetDriver* NetDriver;
-	TMap<UActorChannel*, FWorkingSet> CurrentWorkingSets;
+	TMap<USpatialActorChannel*, FWorkingSet> CurrentWorkingSets;
 	TMap<Worker_RequestId, FWorkingSetData> PendingWorkingSetCreationRequests;
 	TMap<uint32, FWorkingSetData> PendingWorkingSets;
 	uint32 CurrentWorkingSetId;

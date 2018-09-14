@@ -32,6 +32,21 @@ void UWorkingSetManager::CreateWorkingSet(const uint32 & WorkingSetId)
 	PendingWorkingSetCreationRequests.Add(Sender->SendReserveEntityIdsRequest(WorkingSetData->ActorChannels.Num() + 1), *WorkingSetData);
 }
 
+void UWorkingSetManager::SendPositionUpdate(const USpatialActorChannel* ActorChannel, const FVector& Loction)
+{
+	if (FWorkingSet* Data = CurrentWorkingSets.Find(ActorChannel))
+	{
+		// Update parent
+		Sender->SendPositionUpdate(Data->ParentId, Loction);
+
+		// update children
+		for (USpatialActorChannel* Channel : Data->ActorChannels)
+		{
+			Sender->SendPositionUpdate(Channel->GetEntityId(), Loction);
+		}
+	}
+}
+
 bool UWorkingSetManager::IsRelevantRequest(const Worker_RequestId & RequestId)
 {
 	return PendingWorkingSetCreationRequests.Contains(RequestId);

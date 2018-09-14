@@ -99,6 +99,13 @@ bool USpatialActorChannel::IsSingletonEntity()
 	return NetDriver->GlobalStateManager->IsSingletonEntity(EntityId);
 }
 
+bool USpatialActorChannel::IsAValidWorkingSet(UClass * Class)
+{
+	return Class->GetName().Contains(TEXT("ProjectCharacter"))
+		|| Class->GetName().Contains(TEXT("Controller"))
+		|| Class->GetName().Contains(TEXT("PlayerState"));
+}
+
 bool USpatialActorChannel::CleanUp(const bool bForDestroy)
 {
 #if WITH_EDITOR
@@ -347,9 +354,7 @@ bool USpatialActorChannel::ReplicateActor()
 
 			// Calculate initial spatial position (but don't send component update) and create the entity.
 			LastSpatialPosition = GetActorSpatialPosition(Actor);
-			if (Actor->GetClass()->GetName().Contains(TEXT("ProjectCharacter"))
-				|| Actor->GetClass()->GetName().Contains(TEXT("Controller"))
-				|| Actor->GetClass()->GetName().Contains(TEXT("PlayerState")))
+			if (IsAValidWorkingSet(Actor->GetClass()))
 			{
 				if (WorkingSetId < 0)
 				{
@@ -635,10 +640,6 @@ void USpatialActorChannel::OnCreateEntityResponse(const Worker_CreateEntityRespo
 
 void USpatialActorChannel::UpdateSpatialPosition()
 {
-	// PlayerController's and PlayerState's are a special case here. To ensure that they and their associated pawn are 
-	// handed between workers at the same time (which is not guaranteed), we ensure that we update the position component 
-	// of the PlayerController and PlayerState at the same time as the pawn.
-
 	// Check that it has moved sufficiently far to be updated
 	const float SpatialPositionThreshold = 100.0f * 100.0f; // 1m (100cm)
 	FVector ActorSpatialPosition = GetActorSpatialPosition(Actor);
@@ -648,24 +649,15 @@ void USpatialActorChannel::UpdateSpatialPosition()
 	}
 
 	LastSpatialPosition = ActorSpatialPosition;
-	Sender->SendPositionUpdate(GetEntityId(), LastSpatialPosition);
 
-	// If we're a pawn and are controlled by a player controller, update the player controller and the player state positions too.
-	if (APawn* Pawn = Cast<APawn>(Actor))
+
+	if (IsAValidWorkingSet(Actor->GetClass()))
 	{
-		if (APlayerController* PlayerController = Cast<APlayerController>(Pawn->GetController()))
-		{
-			USpatialActorChannel* ControllerActorChannel = Cast<USpatialActorChannel>(Connection->ActorChannels.FindRef(PlayerController));
-			if (ControllerActorChannel)
-			{
-				Sender->SendPositionUpdate(ControllerActorChannel->GetEntityId(), LastSpatialPosition);
-			}
-			USpatialActorChannel* PlayerStateActorChannel = Cast<USpatialActorChannel>(Connection->ActorChannels.FindRef(PlayerController->PlayerState));
-			if (PlayerStateActorChannel)
-			{
-				Sender->SendPositionUpdate(PlayerStateActorChannel->GetEntityId(), LastSpatialPosition);
-			}
-		}
+		WorkingSetManager->SendPositionUpdate(this, LastSpatialPosition);
+	}
+	else
+	{
+		Sender->SendPositionUpdate(GetEntityId(), LastSpatialPosition);
 	}
 }
 
