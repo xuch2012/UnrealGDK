@@ -50,7 +50,6 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 
 		for (uint32 i = 0; i < NumOfEntities-1; i++) {
 			USpatialActorChannel* ActorChannel = ActorChannels[i];
-			ActorChannel->SetEntityId(FirstId + i + 1);
 			CurrentWorkingSets.Add(ActorChannel, WorkingSet);
 			Sender->SendCreateEntityRequest(ActorChannel,
 				Location,
@@ -67,7 +66,8 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 // Todo: be able to have automatic working set creations
 uint32 UWorkingSetManager::GetWorkingSetSize(const uint32 & WorkingSetId)
 {
-	if (PendingWorkingSets.Contains(WorkingSetId)) {
+	if (PendingWorkingSets.Contains(WorkingSetId))
+	{
 		return PendingWorkingSets.Find(WorkingSetId)->ActorChannels.Num();
 	}
 

@@ -347,18 +347,25 @@ bool USpatialActorChannel::ReplicateActor()
 
 			// Calculate initial spatial position (but don't send component update) and create the entity.
 			LastSpatialPosition = GetActorSpatialPosition(Actor);
-			if (WorkingSetId < 0)
+			if (Actor->GetClass()->GetName().Contains(TEXT("ProjectCharacter"))
+				|| Actor->GetClass()->GetName().Contains(TEXT("Controller"))
+				|| Actor->GetClass()->GetName().Contains(TEXT("PlayerState")))
 			{
-				WorkingSetId = WorkingSetManager->RegisterNewWorkingSet();
-			}
+				if (WorkingSetId < 0)
+				{
+					WorkingSetId = WorkingSetManager->RegisterNewWorkingSet();
+				}
 
-			WorkingSetManager->EnqueueForWorkingSet(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, WorkingSetId);
+				WorkingSetManager->EnqueueForWorkingSet(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, WorkingSetId);
 
-			if (WorkingSetManager->GetWorkingSetSize(WorkingSetId) == 3)
+				if (WorkingSetManager->GetWorkingSetSize(WorkingSetId) == 3)
+				{
+					WorkingSetManager->CreateWorkingSet(WorkingSetId);
+				}
+			} else
 			{
-				WorkingSetManager->CreateWorkingSet(WorkingSetId);
+				Sender->SendCreateEntityRequest(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, nullptr);
 			}
-			//Sender->SendCreateEntityRequest(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, nullptr);
 		}
 		else
 		{
