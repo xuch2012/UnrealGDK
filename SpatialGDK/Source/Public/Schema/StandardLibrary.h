@@ -124,6 +124,31 @@ struct SpatialEntityAcl : SpatialComponent
 		}
 	}
 
+	void ApplyComponentUpdate(const Worker_ComponentUpdate& Update)
+	{
+		Schema_Object* ComponentObject = Schema_GetComponentUpdateFields(Update.schema_type);
+
+		if (Schema_GetObjectCount(ComponentObject, 1) > 0)
+		{
+			ReadAcl = Schema_GetWorkerRequirementSet(ComponentObject, 1);
+		}
+
+		// This is never emptied, so does not need an additional check for cleared fields
+		uint32 KVPairCount = Schema_GetObjectCount(ComponentObject, 2);
+		if (KVPairCount > 0)
+		{
+			ComponentWriteAcl.Empty();
+			for (uint32 i = 0; i < KVPairCount; i++)
+			{
+				Schema_Object* KVPairObject = Schema_IndexObject(ComponentObject, 2, i);
+				uint32 Key = Schema_GetUint32(KVPairObject, SCHEMA_MAP_KEY_FIELD_ID);
+				WorkerRequirementSet Value = Schema_GetWorkerRequirementSet(KVPairObject, SCHEMA_MAP_VALUE_FIELD_ID);
+
+				ComponentWriteAcl.Add(Key, Value);
+			}
+		}
+	}
+
 	Worker_ComponentData CreateEntityAclData()
 	{
 		Worker_ComponentData Data = {};
@@ -141,6 +166,25 @@ struct SpatialEntityAcl : SpatialComponent
 		}
 
 		return Data;
+	}
+
+	Worker_ComponentUpdate CreateEntityAclUpdate()
+	{
+		Worker_ComponentUpdate ComponentUpdate = {};
+		ComponentUpdate.component_id = ENTITY_ACL_COMPONENT_ID;
+		ComponentUpdate.schema_type = Schema_CreateComponentUpdate(ENTITY_ACL_COMPONENT_ID);
+		Schema_Object* ComponentObject = Schema_GetComponentUpdateFields(ComponentUpdate.schema_type);
+
+		Schema_AddWorkerRequirementSet(ComponentObject, 1, ReadAcl);
+
+		for (const auto& KVPair : ComponentWriteAcl)
+		{
+			Schema_Object* KVPairObject = Schema_AddObject(ComponentObject, 2);
+			Schema_AddUint32(KVPairObject, SCHEMA_MAP_KEY_FIELD_ID, KVPair.Key);
+			Schema_AddWorkerRequirementSet(KVPairObject, SCHEMA_MAP_VALUE_FIELD_ID, KVPair.Value);
+		}
+
+		return ComponentUpdate;
 	}
 
 	WorkerRequirementSet ReadAcl;

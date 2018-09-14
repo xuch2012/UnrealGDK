@@ -82,6 +82,7 @@ public:
 	// For an object that is replicated by this channel (i.e. this channel's actor or its component), find out whether a given handle is an array.
 	bool IsDynamicArrayHandle(UObject* Object, uint16 Handle);
 
+	void SpatialViewTick();
 	FObjectReplicator& PreReceiveSpatialUpdate(UObject* TargetObject);
 	void PostReceiveSpatialUpdate(UObject* TargetObject, const TArray<UProperty*>& RepNotifies);
 
@@ -113,6 +114,9 @@ public:
 
 private:
 	Worker_EntityId EntityId;
+	TArray<Worker_InterestOverride> ComponentInterests;
+	bool bFirstTick;
+	bool bNetOwned;
 
 	UPROPERTY(transient)
 	USpatialNetDriver* NetDriver;
@@ -135,5 +139,4 @@ private:
 	// If this actor channel is responsible for creating a new entity, this will be set to true during initial replication.
 	UPROPERTY(Transient)
 	bool bCreatingNewEntity;
-
 };

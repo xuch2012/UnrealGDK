@@ -56,11 +56,12 @@ void UpdateChangelistHistory(FRepState * RepState)
 
 USpatialActorChannel::USpatialActorChannel(const FObjectInitializer& ObjectInitializer /*= FObjectInitializer::Get()*/)
 	: Super(ObjectInitializer)
+	, bCoreActor(true)
 	, EntityId(0)
+	, bFirstTick(true)
 	, NetDriver(nullptr)
+	, bCreatingNewEntity(false)
 {
-	bCoreActor = true;
-	bCreatingNewEntity = false;
 }
 
 void USpatialActorChannel::Init(UNetConnection* InConnection, int32 ChannelIndex, bool bOpenedLocally)
@@ -296,27 +297,14 @@ bool USpatialActorChannel::ReplicateActor()
 			//check(!Actor->IsFullNameStableForNetworking() || Interop->CanSpawnReplicatedStablyNamedActors());
 
 			// When a player is connected, a FUniqueNetIdRepl is created with the players worker ID. This eventually gets stored
-			// inside APlayerState::UniqueId when UWorld::SpawnPlayActor is called. If this actor channel is managing a pawn or a 
-			// player controller, get the player state.
+			// inside APlayerState::UniqueId when UWorld::SpawnPlayActor is called.
 			FString PlayerWorkerId;
-			APlayerState* PlayerState = Cast<APlayerState>(Actor);
-			if (!PlayerState)
+
+			// Native unreal version: OwningConnection == Connection || (OwningConnection != NULL && OwningConnection->IsA(UChildConnection::StaticClass()) && ((UChildConnection*)OwningConnection)->Parent == Connection)
+			// But since we do not have multiple connections per client, this should be equal to the above flow
+			if (UNetConnection* ActorOwningConnection = Actor->GetNetConnection())
 			{
-				if (APawn* Pawn = Cast<APawn>(Actor))
-				{
-					PlayerState = Pawn->PlayerState;
-				}
-			}
-			if (!PlayerState)
-			{
-				if (PlayerController)
-				{
-					PlayerState = PlayerController->PlayerState;
-				}
-			}
-			if (PlayerState)
-			{
-				PlayerWorkerId = PlayerState->UniqueId.ToString();
+				PlayerWorkerId = ActorOwningConnection->PlayerController->PlayerState->UniqueId->ToString();
 			}
 			else
 			{
@@ -691,5 +679,29 @@ FVector USpatialActorChannel::GetActorSpatialPosition(AActor* Actor)
 	else
 	{
 		return FVector::ZeroVector;
+	}
+}
+
+void USpatialActorChannel::SpatialViewTick()
+{
+	if (Actor != nullptr && !Actor->IsPendingKill() && IsReadyForReplication())
+	{
+		bool bOldNetOwned = bNetOwned;
+		bNetOwned = Actor->GetNetConnection() != nullptr;
+		if (bFirstTick || bOldNetOwned != bNetOwned)
+		{
+			bool bSuccess = true;
+
+			if (NetDriver->IsServer())
+			{
+				bSuccess &= Sender->UpdateEntityACLs(Actor, GetEntityId());
+			}
+			else
+			{
+				Sender->SendComponentInterests(Actor, GetEntityId());
+			}
+
+			bFirstTick = !bSuccess;
+		}
 	}
 }

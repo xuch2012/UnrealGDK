@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 
+#include "SpatialTypebindingManager.h"
 #include "Utils/RepDataUtils.h"
 
 #include <improbable/c_schema.h>
@@ -12,6 +13,7 @@
 #include "SpatialSender.generated.h"
 
 class USpatialNetDriver;
+class USpatialView;
 class USpatialWorkerConnection;
 class USpatialActorChannel;
 class USpatialPackageMapClient;
@@ -47,6 +49,8 @@ public:
 
 	// Actor Updates
 	void SendComponentUpdates(UObject* Object, USpatialActorChannel* Channel, const FRepChangeState* RepChanges, const FHandoverChangeState* HandoverChanges);
+	void FillComponentInterests(FClassInfo* Info, bool bNetOwned, TArray<Worker_InterestOverride>& ComponentInterest);
+	void SendComponentInterests(AActor* Actor, Worker_EntityId EntityId);
 	void SendPositionUpdate(Worker_EntityId EntityId, const FVector& Location);
 	void SendRotationUpdate(Worker_EntityId EntityId, const FRotator& Rotation);
 	void SendRPC(UObject* TargetObject, UFunction* Function, void* Parameters, bool bOwnParameters);
@@ -59,6 +63,7 @@ public:
 	void ResolveOutgoingOperations(UObject* Object, bool bIsHandover);
 	void ResolveOutgoingRPCs(UObject* Object);
 
+	bool UpdateEntityACLs(AActor* Actor, Worker_EntityId EntityId);
 private:
 	// Actor Lifecycle
 	Worker_RequestId CreateEntity(const FString& ClientWorkerId, const FString& Metadata, USpatialActorChannel* Channel);
@@ -74,6 +79,7 @@ private:
 
 private:
 	USpatialNetDriver* NetDriver;
+	USpatialView* View;
 	USpatialWorkerConnection* Connection;
 	USpatialReceiver* Receiver;
 	USpatialPackageMapClient* PackageMap;

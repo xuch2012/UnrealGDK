@@ -2,12 +2,16 @@
 
 #include "SpatialView.h"
 
+#include "EngineClasses/SpatialNetConnection.h"
 #include "EngineClasses/SpatialNetDriver.h"
 #include "Interop/SpatialReceiver.h"
+#include "Interop/SpatialSender.h"
 
-void USpatialView::Init(USpatialNetDriver* NetDriver)
+void USpatialView::Init(USpatialNetDriver* InNetDriver)
 {
+	NetDriver = InNetDriver;
 	Receiver = NetDriver->Receiver;
+	Sender = NetDriver->Sender;
 }
 
 void USpatialView::ProcessOps(Worker_OpList* OpList)
@@ -42,6 +46,7 @@ void USpatialView::ProcessOps(Worker_OpList* OpList)
 			break;
 		case WORKER_OP_TYPE_COMPONENT_UPDATE:
 			QueuedComponentUpdateOps.Add(Op);
+			OnComponentUpdate(Op->component_update);
 			break;
 
 		// Commands
@@ -94,6 +99,14 @@ void USpatialView::ProcessOps(Worker_OpList* OpList)
 	}
 
 	Receiver->ProcessQueuedResolvedObjects();
+	for (auto& Pair : NetDriver->GetSpatialOSNetConnection()->ActorChannels)
+	{
+		USpatialActorChannel* Channel = Cast<USpatialActorChannel>(Pair.Value);
+		if (Channel != nullptr)
+		{
+			Channel->SpatialViewTick();
+		}
+	}
 }
 
 Worker_Authority USpatialView::GetAuthority(Worker_EntityId EntityId, Worker_ComponentId ComponentId)
@@ -119,17 +132,41 @@ SpatialUnrealMetadata* USpatialView::GetUnrealMetadata(Worker_EntityId EntityId)
 	return nullptr;
 }
 
+SpatialEntityAcl* USpatialView::GetEntityACL(Worker_EntityId EntityId)
+{
+	if (TSharedPtr<SpatialEntityAcl>* EntityAclPtr = EntityACLMap.Find(EntityId))
+	{
+		return EntityAclPtr->Get();
+	}
+
+	return nullptr;
+}
+
 void USpatialView::OnAddComponent(const Worker_AddComponentOp& Op)
 {
 	if (Op.data.component_id == SpatialUnrealMetadata::ComponentId)
 	{
 		EntityUnrealMetadataMap.Add(Op.entity_id, MakeShared<SpatialUnrealMetadata>(Op.data));
 	}
+
+	if (Op.data.component_id == EntityAcl::ComponentId)
+	{
+		EntityACLMap.Add(Op.entity_id, MakeShared<EntityAcl>(Op.data));
+	}
 }
 
 void USpatialView::OnRemoveEntity(const Worker_RemoveEntityOp& Op)
 {
 	EntityUnrealMetadataMap.Remove(Op.entity_id);
+	EntityACLMap.Remove(Op.entity_id);
+}
+
+void USpatialView::OnComponentUpdate(const Worker_ComponentUpdateOp& Op)
+{
+	if (Op.update.component_id == EntityAcl::ComponentId)
+	{
+		EntityACLMap[Op.entity_id]->ApplyComponentUpdate(Op.update);
+	}
 }
 
 void USpatialView::OnAuthorityChange(const Worker_AuthorityChangeOp& Op)

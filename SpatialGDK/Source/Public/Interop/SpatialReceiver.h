@@ -124,9 +124,6 @@ private:
 	AActor* SpawnNewEntity(SpatialPosition* Position, struct SpatialRotation* Rotation, UClass* ActorClass, bool bDeferred);
 	UClass* GetNativeEntityClass(SpatialMetadata* Metadata);
 
-	void FillComponentInterest(FClassInfo* Info, bool bNetOwned, TArray<Worker_InterestOverride>& ComponentInterest);
-	void SendComponentInterests(AActor* Actor, Worker_EntityId EntityId);
-
 	void ApplyComponentData(Worker_EntityId EntityId, Worker_ComponentData& Data, USpatialActorChannel* Channel);
 	void ApplyComponentUpdate(const Worker_ComponentUpdate& ComponentUpdate, UObject* TargetObject, USpatialActorChannel* Channel, bool bIsHandover);
 

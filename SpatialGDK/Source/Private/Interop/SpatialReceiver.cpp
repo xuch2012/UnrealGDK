@@ -291,7 +291,7 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 		if (NetDriver->ServerConnection)
 		{
 			// Update interest on the entity's components after receiving initial component data (so Role and RemoteRole are properly set).
-			SendComponentInterests(EntityActor, EntityId);
+			Sender->SendComponentInterests(EntityActor, EntityId);
 
 			// This is a bit of a hack unfortunately, among the core classes only PlayerController implements this function and it requires
 			// a player index. For now we don't support split screen, so the number is always 0.
@@ -378,34 +378,6 @@ UClass* USpatialReceiver::GetNativeEntityClass(SpatialMetadata* Metadata)
 {
 	UClass* Class = FindObject<UClass>(ANY_PACKAGE, *Metadata->EntityType);
 	return Class->IsChildOf<AActor>() ? Class : nullptr;
-}
-
-void USpatialReceiver::FillComponentInterest(FClassInfo* Info, bool bNetOwned, TArray<Worker_InterestOverride>& ComponentInterest)
-{
-	Worker_InterestOverride SingleClientInterest = { Info->SingleClientComponent, bNetOwned };
-	ComponentInterest.Add(SingleClientInterest);
-
-	Worker_InterestOverride HandoverInterest = { Info->HandoverComponent, false };
-	ComponentInterest.Add(HandoverInterest);
-}
-
-void USpatialReceiver::SendComponentInterests(AActor* Actor, Worker_EntityId EntityId)
-{
-	// This effectively checks whether the actor is owned by our PlayerController
-	bool bNetOwned = Actor->GetNetConnection() != nullptr;
-
-	TArray<Worker_InterestOverride> ComponentInterest;
-
-	FClassInfo* ActorInfo = TypebindingManager->FindClassInfoByClass(Actor->GetClass());
-	FillComponentInterest(ActorInfo, bNetOwned, ComponentInterest);
-
-	for (UClass* SubobjectClass : ActorInfo->SubobjectClasses)
-	{
-		FClassInfo* SubobjectInfo = TypebindingManager->FindClassInfoByClass(SubobjectClass);
-		FillComponentInterest(SubobjectInfo, bNetOwned, ComponentInterest);
-	}
-
-	NetDriver->Connection->SendComponentInterest(EntityId, ComponentInterest);
 }
 
 // Note that in SpatialGDK, this function will not be called on the spawning worker.
