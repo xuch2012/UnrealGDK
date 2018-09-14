@@ -107,11 +107,11 @@ void USpatialTypebindingManager::CreateTypebindings()
 		Info.RPCComponents[RPC_Server] = SchemaDatabase->ClassToSchema[Class].ServerRPCs;
 		ComponentToClassMap.Add(Info.RPCComponents[RPC_Server], Class);
 
-		Info.RPCComponents[RPC_NetMulticast] = SchemaDatabase->ClassToSchema[Class].NetMulticastRPCs;
-		ComponentToClassMap.Add(Info.RPCComponents[RPC_NetMulticast], Class);
-
 		Info.RPCComponents[RPC_CrossServer] = SchemaDatabase->ClassToSchema[Class].CrossServerRPCs;
 		ComponentToClassMap.Add(Info.RPCComponents[RPC_CrossServer], Class);
+
+		Info.RPCComponents[RPC_NetMulticast] = SchemaDatabase->ClassToSchema[Class].NetMulticastRPCs;
+		ComponentToClassMap.Add(Info.RPCComponents[RPC_NetMulticast], Class);
 
 		if (Class->IsChildOf<AActor>())
 		{

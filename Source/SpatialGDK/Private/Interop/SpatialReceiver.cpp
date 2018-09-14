@@ -443,6 +443,10 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 	{
 		// TODO: Handover
 	}
+	else if (Data.component_id == Info->WorkingSetComponent)
+	{
+		UE_LOG(LogTemp, Log, TEXT("Skipping because Workig set components don't have actual data."));
+	}
 	else
 	{
 		UE_LOG(LogTemp, Verbose, TEXT("Skipping because RPC components don't have actual data."));
