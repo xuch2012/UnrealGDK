@@ -229,19 +229,6 @@ void FSpatialNetGUIDCache::RemoveEntitySubobjectsNetGUIDs(Worker_EntityId Entity
 
 void FSpatialNetGUIDCache::NetworkRemapObjectRefPaths(UnrealObjectRef& ObjectRef) const
 {
-	FNetworkGUID* CachedGUID = UnrealObjectRefToNetGUID.Find(ObjectRef);
-	FNetworkGUID NetGUID = CachedGUID ? *CachedGUID : FNetworkGUID{};
-	if (!NetGUID.IsValid() && ObjectRef.Path.IsSet())
-	{
-		FNetworkGUID OuterGUID;
-		if (ObjectRef.Outer.IsSet())
-		{
-			OuterGUID = GetNetGUIDFromUnrealObjectRef(ObjectRef.Outer.GetValue());
-		}
-		NetGUID = RegisterNetGUIDFromPath(ObjectRef.Path.GetValue(), OuterGUID);
-		RegisterObjectRef(NetGUID, ObjectRef);
-	}
-
 	// If we have paths, network-sanitize all of them (e.g. removing PIE prefix).
 	if (!ObjectRef.Path.empty())
 	{
