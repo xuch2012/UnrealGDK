@@ -149,9 +149,9 @@ void USpatialView::OnAddComponent(const Worker_AddComponentOp& Op)
 		EntityUnrealMetadataMap.Add(Op.entity_id, MakeShared<SpatialUnrealMetadata>(Op.data));
 	}
 
-	if (Op.data.component_id == EntityAcl::ComponentId)
+	if (Op.data.component_id == SpatialEntityAcl::ComponentId)
 	{
-		EntityACLMap.Add(Op.entity_id, MakeShared<EntityAcl>(Op.data));
+		EntityACLMap.Add(Op.entity_id, MakeShared<SpatialEntityAcl>(Op.data));
 	}
 }
 
@@ -163,7 +163,7 @@ void USpatialView::OnRemoveEntity(const Worker_RemoveEntityOp& Op)
 
 void USpatialView::OnComponentUpdate(const Worker_ComponentUpdateOp& Op)
 {
-	if (Op.update.component_id == EntityAcl::ComponentId)
+	if (Op.update.component_id == SpatialEntityAcl::ComponentId)
 	{
 		EntityACLMap[Op.entity_id]->ApplyComponentUpdate(Op.update);
 	}

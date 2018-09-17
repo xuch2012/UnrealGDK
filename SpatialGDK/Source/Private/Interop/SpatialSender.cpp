@@ -618,7 +618,7 @@ void USpatialSender::ResolveOutgoingRPCs(UObject* Object)
 
 bool USpatialSender::UpdateEntityACLs(AActor* Actor, Worker_EntityId EntityId)
 {
-	EntityAcl* EntityACL = View->GetEntityACL(EntityId);
+	SpatialEntityAcl* EntityACL = View->GetEntityACL(EntityId);
 
 	if (EntityACL == nullptr) return false;
 
