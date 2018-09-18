@@ -157,6 +157,30 @@ void USpatialReceiver::OnAuthorityChange(Worker_AuthorityChangeOp& Op)
 	{
 		GlobalStateManager->ExecuteInitialSingletonActorReplication();
 	}
+	else if (UClass* Class = TypebindingManager->FindClassByComponentId(Op.component_id))
+	{
+		FClassInfo* Info = TypebindingManager->FindClassInfoByClass(Class);
+		check(Info);
+		if (Op.component_id == Info->RPCComponents[RPC_Client])
+		{
+			if (USpatialActorChannel* ActorChannel = NetDriver->GetActorChannelByEntityId(Op.entity_id))
+			{
+				if (UObject* TargetObject = GetTargetObjectFromChannelAndClass(ActorChannel, Class))
+				{
+					if (TargetObject->IsA<AActor>())
+					{
+						UByteProperty* RoleProperty = Cast<UByteProperty>(Class->FindPropertyByName(NAME_Role));
+						check(RoleProperty);
+
+						ENetRole Role = Op.authority == WORKER_AUTHORITY_AUTHORITATIVE ? ROLE_AutonomousProxy : ROLE_SimulatedProxy;
+						RoleProperty->SetPropertyValue_InContainer(TargetObject, Role);
+
+						UE_LOG(LogTemp, Warning, TEXT("Changing role as a result of Authority op: %s : %d"), *TargetObject->GetName(), (int)Role);
+					}
+				}
+			}
+		}
+	}
 }
 
 void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
