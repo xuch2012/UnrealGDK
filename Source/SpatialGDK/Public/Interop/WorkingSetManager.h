@@ -5,10 +5,13 @@
 #include "CoreMinimal.h"
 #include "SpatialActorChannel.h"
 #include "SpatialSender.h"
+#include "SpatialReceiver.h"
+#include "Schema/StandardLibrary.h"
 #include "WorkingSetManager.generated.h"
 
 class USpatialSender;
 class USpatialNetDriver;
+class USpatialReceiver;
 
 USTRUCT()
 struct FWorkingSet
@@ -26,7 +29,17 @@ struct FWorkingSetSpawnData
 
 	Worker_EntityId EntityId;
 	WorkingSet WorkingSetData;
+
+	bool operator==(const FWorkingSetSpawnData& Other) const
+	{
+		return EntityId == Other.EntityId;
+	}
 };
+
+FORCEINLINE uint32 GetTypeHash(const FWorkingSetSpawnData& data)
+{
+	return FCrc::MemCrc32(&data, sizeof(FWorkingSetSpawnData));
+}
 
 
 // Assumes same location and player worker id for now
@@ -82,7 +95,7 @@ private:
 	TArray<FWorkingSetSpawnData> ActorSpawnQueue;
 
 	bool IsReadyForReplication(const FWorkingSetSpawnData& EntityId);
-	FWorkingSetSpawnData* GetWorkingSetDataByEntityId(const Worker_EntityId& EntityId);
+	const FWorkingSetSpawnData* GetWorkingSetDataByEntityId(const Worker_EntityId& EntityId);
 	void SpawnAndCleanActors(const FWorkingSetSpawnData& EntityId);
 
 	uint32 CurrentWorkingSetId;

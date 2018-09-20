@@ -9,7 +9,6 @@
 #include "EngineClasses/SpatialPackageMapClient.h"
 #include "Interop/SpatialTypebindingManager.h"
 #include "Schema/StandardLibrary.h"
-#include "WorkingSetManager.h"
 
 #include <improbable/c_schema.h>
 #include <improbable/c_worker.h>
@@ -82,6 +81,8 @@ class USpatialReceiver : public UObject
 public:
 	void Init(USpatialNetDriver* NetDriver);
 
+	void CreateActor(Worker_EntityId EntityId);
+
 	// Dispatcher Calls
 	void OnCriticalSection(bool InCriticalSection);
 	void OnAddEntity(Worker_AddEntityOp& Op);
@@ -108,7 +109,6 @@ private:
 	void EnterCriticalSection();
 	void LeaveCriticalSection();
 
-	void CreateActor(Worker_EntityId EntityId);
 	void CreateWorkingSetActor(Worker_EntityId EntityId);
 
 	void RemoveActor(Worker_EntityId EntityId);

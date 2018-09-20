@@ -201,9 +201,11 @@ struct Persistence : Component
 	}
 };
 
+const Worker_ComponentId WORKING_SET_COMPONENT_ID = 100009;
+
 struct WorkingSet : Component
 {
-	static const Worker_ComponentId ComponentId = SpatialConstants::WORKING_SET_COMPONENT_ID;
+	static const Worker_ComponentId ComponentId = WORKING_SET_COMPONENT_ID;
 
 	WorkingSet() = default;
 
@@ -218,7 +220,7 @@ struct WorkingSet : Component
 		uint32 SpatialChildEntityCount = Schema_GetEntityIdCount(ComponentObject, 1);
 		Schema_GetEntityIdList(ComponentObject, 1, SpatialChildEntityReferences);
 
-		ChildReferences = TArray(SpatialChildEntityReferences, SpatialChildEntityCount);
+		ChildReferences = TArray<Worker_EntityId>(SpatialChildEntityReferences, SpatialChildEntityCount);
 		ParentReference = Schema_GetEntityId(ComponentObject, 2);
 	}
 

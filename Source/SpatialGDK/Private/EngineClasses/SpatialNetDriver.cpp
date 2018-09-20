@@ -10,6 +10,7 @@
 #include "Net/DataReplication.h"
 #include "Net/RepLayout.h"
 #include "SocketSubsystem.h"
+#include "WorkingSetManager.h"
 
 #include "Interop/Connection/SpatialWorkerConnection.h"
 #include "Interop/GlobalStateManager.h"

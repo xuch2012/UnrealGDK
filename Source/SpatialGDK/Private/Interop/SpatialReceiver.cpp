@@ -131,14 +131,16 @@ void USpatialReceiver::OnAddComponent(Worker_AddComponentOp& Op)
 		GlobalStateManager->LinkExistingSingletonActors();
 		return;
 	case SpatialConstants::WORKING_SET_COMPONENT_ID:
-		WorkingSet* WorkingSetComponent = WorkingSet(Op.data);
-		if (WorkingSetComponent->isParentSet())
 		{
-			WorkingSetManager->AddParent(Op.entity_id, *WorkingSetComponent);
-			return;
+			WorkingSet WorkingSetComponent = WorkingSet(Op.data);
+			if (WorkingSetComponent.isParentSet())
+			{
+				WorkingSetManager->AddParent(Op.entity_id, WorkingSetComponent);
+				return;
+			}
+			Data = MakeShared<WorkingSet>(Op.data);
+			break;
 		}
-		Data = MakeShared<WorkingSet>(Op.data);
-		break;
 	default:
 		Data = MakeShared<DynamicComponent>(Op.data);
 		break;

@@ -5,6 +5,7 @@
 #include "Engine/DemoNetDriver.h"
 #include "GameFramework/PlayerState.h"
 #include "Net/DataBunch.h"
+#include "WorkingSetManager.h"
 #include "Net/NetworkProfiler.h"
 
 #include "EngineClasses/SpatialNetConnection.h"
