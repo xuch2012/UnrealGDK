@@ -214,10 +214,11 @@ struct WorkingSet : Component
 
 	WorkingSet(const Worker_ComponentData& Data)
 	{
-		Schema_EntityId* SpatialChildEntityReferences;
 		Schema_Object* ComponentObject = Schema_GetComponentDataFields(Data.schema_type);
 
 		uint32 SpatialChildEntityCount = Schema_GetEntityIdCount(ComponentObject, 1);
+		Schema_EntityId* SpatialChildEntityReferences = nullptr;
+
 		Schema_GetEntityIdList(ComponentObject, 1, SpatialChildEntityReferences);
 
 		ChildReferences = TArray<Worker_EntityId>(SpatialChildEntityReferences, SpatialChildEntityCount);

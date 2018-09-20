@@ -181,9 +181,9 @@ bool UWorkingSetManager::IsReadyForReplication(const FWorkingSetSpawnData & Pare
 
 	for (const Worker_EntityId& ParentChildReference : ParentSpawnData.WorkingSetData.ChildReferences)
 	{
-		if (!ChildSpawnData->FindByPredicate([&ParentChildReference](FWorkingSetSpawnData* InData)
+		if (!ChildSpawnData->FindByPredicate([&ParentChildReference](FWorkingSetSpawnData InData)
 		{
-			return InData->EntityId == ParentChildReference;
+			return InData.EntityId == ParentChildReference;
 		}))
 		{
 			return false;
