@@ -109,6 +109,8 @@ private:
 	void LeaveCriticalSection();
 
 	void CreateActor(Worker_EntityId EntityId);
+	void CreateWorkingSetActor(Worker_EntityId EntityId);
+
 	void RemoveActor(Worker_EntityId EntityId);
 	AActor* SpawnNewEntity(Position* PositionComponent, UClass* ActorClass, bool bDeferred);
 	UClass* GetNativeEntityClass(Metadata* MetadataComponent);

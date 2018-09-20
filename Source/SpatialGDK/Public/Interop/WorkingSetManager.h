@@ -19,6 +19,15 @@ struct FWorkingSet
 	TArray<USpatialActorChannel*> ActorChannels;
 };
 
+USTRUCT()
+struct FWorkingSetSpawnData
+{
+	GENERATED_BODY()
+
+	Worker_EntityId EntityId;
+	WorkingSet WorkingSetData;
+};
+
 
 // Assumes same location and player worker id for now
 USTRUCT()
@@ -32,10 +41,11 @@ struct FWorkingSetData
 	TArray<TArray<uint16>> RepChangedData;
 	TArray<TArray<uint16>> HandoverData;
 };
+
 UCLASS()
 class SPATIALGDK_API UWorkingSetManager : public UObject
 {
-	 
+
 	GENERATED_BODY()
 
 public:
@@ -55,16 +65,26 @@ public:
 	uint32 RegisterNewWorkingSet();
 	void EnqueueForWorkingSet(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, const uint32& WorkingSetId);
 
-private:
-
+	void AddParent(const Worker_EntityId& EntityId, const WorkingSet& ParentData);
+	void QueueActorSpawn(const Worker_EntityId& EntityId, const WorkingSet& WorkingSetData);
 
 private:
 	 
 	USpatialSender* Sender;
+	USpatialReceiver* Receiver;
 	USpatialNetDriver* NetDriver;
 	TMap<USpatialActorChannel*, FWorkingSet> CurrentWorkingSets;
 	TMap<Worker_RequestId, FWorkingSetData> PendingWorkingSetCreationRequests;
 	TMap<uint32, FWorkingSetData> PendingWorkingSets;
+
+	//working set spawning
+	TMap<FWorkingSetSpawnData, TArray<FWorkingSetSpawnData>> PendingSpawningSets;
+	TArray<FWorkingSetSpawnData> ActorSpawnQueue;
+
+	bool IsReadyForReplication(const FWorkingSetSpawnData& EntityId);
+	FWorkingSetSpawnData* GetWorkingSetDataByEntityId(const Worker_EntityId& EntityId);
+	void SpawnAndCleanActors(const FWorkingSetSpawnData& EntityId);
+
 	uint32 CurrentWorkingSetId;
 
 };

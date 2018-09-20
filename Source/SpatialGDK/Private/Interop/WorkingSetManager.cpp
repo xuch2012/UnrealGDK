@@ -8,6 +8,7 @@ void UWorkingSetManager::Init(USpatialNetDriver* NetDriver)
 	CurrentWorkingSetId = 1;
 	this->NetDriver = NetDriver;
 	Sender = NetDriver->Sender;
+	Receiver = NetDriver->Receiver;
 	
 }
 
@@ -128,4 +129,88 @@ void UWorkingSetManager::EnqueueForWorkingSet(USpatialActorChannel* Channel, con
 	WorkingSetData->PlayerWorkerId.Add(PlayerWorkerId);
 	WorkingSetData->RepChangedData.Add(RepChanged);
 	WorkingSetData->HandoverData.Add(HandoverChanged);
+}
+
+void UWorkingSetManager::AddParent(const Worker_EntityId& EntityId, const WorkingSet & ParentData)
+{
+	FWorkingSetSpawnData SpawnData = { EntityId, ParentData };
+
+	if (PendingSpawningSets.Contains(SpawnData))
+	{
+		//already contains key
+		return;
+	}
+
+	// Collect existing entities that are waiting for parent
+	TArray<FWorkingSetSpawnData> StoredChildren;
+	for (FWorkingSetSpawnData QueuedActor : ActorSpawnQueue)
+	{
+		if (ParentData.ChildReferences.Contains(QueuedActor.EntityId)) {
+			StoredChildren.Add(QueuedActor);
+			ActorSpawnQueue.Remove(QueuedActor);
+		}
+	}
+
+	PendingSpawningSets.Add(SpawnData, StoredChildren);
+}
+
+void UWorkingSetManager::QueueActorSpawn(const Worker_EntityId & EntityId, const WorkingSet& WorkingSetData)
+{
+	FWorkingSetSpawnData SpawnData = { EntityId, WorkingSetData };
+	if (FWorkingSetSpawnData* SpawningActorsParentId = GetWorkingSetDataByEntityId(EntityId))
+	{
+		PendingSpawningSets.Find(*SpawningActorsParentId).Add(SpawnData);
+		if (IsReadyForReplication(*SpawningActorsParentId))
+		{
+			SpawnAndCleanActors(*SpawningActorsParentId);
+		}
+	}
+	else
+	{
+		ActorSpawnQueue.Add(SpawnData);
+	}
+}
+
+bool UWorkingSetManager::IsReadyForReplication(const FWorkingSetSpawnData & ParentSpawnData)
+{
+	TArray<FWorkingSetSpawnData> ChildSpawnData = PendingSpawningSets.Find(ParentSpawnData);
+	if (ParentSpawnData.WorkingSetData.ChildReferences.Num() != ChildSpawnData.Num())
+	{
+		return false;
+	}
+
+	for (const Worker_EntityId& ParentChildReference : ParentSpawnData.WorkingSetData.ChildReferences)
+	{
+		if (!ChildSpawnData.FindByPredicate([](FWorkingSetSpawnData* InData)
+		{
+			return InData->EntityId == ParentChildReference;
+		}))
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
+FWorkingSetSpawnData* UWorkingSetManager::GetWorkingSetDataByEntityId(const Worker_EntityId & EntityId)
+{
+	for (const auto& Entry : PendingSpawningSets)
+	{
+		if (Entry.Key.EntityId == EntityId)
+		{
+			return &Entry.Key;
+		}
+	}
+	return nullptr;
+}
+
+void UWorkingSetManager::SpawnAndCleanActors(const FWorkingSetSpawnData & ParentSpawnData)
+{
+	TArray<FWorkingSetSpawnData> ChildSpawnData = PendingSpawningSets.Find(ParentSpawnData);
+	for (const FWorkingSetSpawnData& SpawningChild : ChildSpawnData)
+	{
+		Receiver->CreateActor(SpawningChild.EntityId);
+	}
+	PendingSpawningSets.Remove(ParentSpawnData);
 }

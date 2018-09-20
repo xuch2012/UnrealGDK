@@ -200,3 +200,36 @@ struct Persistence : Component
 		return Data;
 	}
 };
+
+struct WorkingSet : Component
+{
+	static const Worker_ComponentId ComponentId = SpatialConstants::WORKING_SET_COMPONENT_ID;
+
+	WorkingSet() = default;
+
+	WorkingSet(const Worker_EntityId& InParentReference, const TArray<Worker_EntityId>& InChildReferences)
+		: ParentReference(InParentReference), ChildReferences(InChildReferences) {}
+
+	WorkingSet(const Worker_ComponentData& Data)
+	{
+		Schema_EntityId* SpatialChildEntityReferences;
+		Schema_Object* ComponentObject = Schema_GetComponentDataFields(Data.schema_type);
+
+		uint32 SpatialChildEntityCount = Schema_GetEntityIdCount(ComponentObject, 1);
+		Schema_GetEntityIdList(ComponentObject, 1, SpatialChildEntityReferences);
+
+		ChildReferences = TArray(SpatialChildEntityReferences, SpatialChildEntityCount);
+		ParentReference = Schema_GetEntityId(ComponentObject, 2);
+	}
+
+
+	// A parent must contain child references
+	bool isParentSet()
+	{
+		return ChildReferences.Num() > 0;
+	}
+
+	Worker_EntityId EntityId;
+	Worker_EntityId ParentReference;
+	TArray<Worker_EntityId> ChildReferences;
+};

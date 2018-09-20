@@ -71,7 +71,7 @@ void USpatialReceiver::LeaveCriticalSection()
 	// Add entities. Alter with working set
 	for (Worker_EntityId& PendingAddEntity : PendingAddEntities)
 	{
-		CreateActor(PendingAddEntity);
+		CreateWorkingSetActor(PendingAddEntity);
 	}
 
 	// Remove entities.
@@ -130,6 +130,15 @@ void USpatialReceiver::OnAddComponent(Worker_AddComponentOp& Op)
 		GlobalStateManager->ApplyData(Op.data);
 		GlobalStateManager->LinkExistingSingletonActors();
 		return;
+	case SpatialConstants::WORKING_SET_COMPONENT_ID:
+		WorkingSet* WorkingSetComponent = WorkingSet(Op.data);
+		if (WorkingSetComponent->isParentSet())
+		{
+			WorkingSetManager->AddParent(Op.entity_id, *WorkingSetComponent);
+			return;
+		}
+		Data = MakeShared<WorkingSet>(Op.data);
+		break;
 	default:
 		Data = MakeShared<DynamicComponent>(Op.data);
 		break;
@@ -163,14 +172,12 @@ void USpatialReceiver::OnAuthorityChange(Worker_AuthorityChangeOp& Op)
 
 void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 {
-	checkf(World, TEXT("We should have a world whilst processing ops."));
-	check(NetDriver);
-
 	UEntityRegistry* EntityRegistry = NetDriver->GetEntityRegistry();
 	check(EntityRegistry);
 
 	Position* PositionComponent = GetComponentData<Position>(*this, EntityId);
 	Metadata* MetadataComponent = GetComponentData<Metadata>(*this, EntityId);
+
 	check(PositionComponent && MetadataComponent);
 
 	AActor* EntityActor = EntityRegistry->GetActorFromEntityId(EntityId);
@@ -319,6 +326,22 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 			// Call PostNetInit on client only.
 			EntityActor->PostNetInit();
 		}
+	}
+}
+
+void USpatialReceiver::CreateWorkingSetActor(Worker_EntityId EntityId)
+{
+	checkf(World, TEXT("We should have a world whilst processing ops."));
+	check(NetDriver);
+
+	//change to correctly check for data
+	if (WorkingSet* WorkingSetComponent = GetComponentData<WorkingSet>(*this, EntityId))
+	{
+		WorkingSetManager->QueueActorSpawn(EntityId, *WorkingSetComponent);
+	}
+	else
+	{
+		CreateActor(EntityId);
 	}
 }
 
