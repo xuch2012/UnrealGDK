@@ -75,7 +75,6 @@ public:
 private:
 	void FindSupportedClasses();
 	void CreateTypebindings();
-	bool IsValidWorkingSetClass(UClass *const& SpatialClass);
 
 private:
 	UPROPERTY()

@@ -124,12 +124,12 @@ Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, con
 	// Working set data
  	if (WorkingSetParentId)
  	{
-		ComponentWriteAcl.Add(Info->WorkingSetComponent, WorkersOnly);
+		ComponentWriteAcl.Add(SpatialConstants::WORKING_SET_COMPONENT_ID, WorkersOnly);
 		Worker_ComponentData WorkingSet = {};
- 		WorkingSet.component_id = Info->WorkingSetComponent;
-		WorkingSet.schema_type = Schema_CreateComponentData(Info->WorkingSetComponent);
+ 		WorkingSet.component_id = SpatialConstants::WORKING_SET_COMPONENT_ID;
+		WorkingSet.schema_type = Schema_CreateComponentData(SpatialConstants::WORKING_SET_COMPONENT_ID);
 		Schema_Object* ComponentObject = Schema_GetComponentDataFields(WorkingSet.schema_type);
-		Schema_AddEntityId(ComponentObject, 1, *WorkingSetParentId);
+		Schema_AddEntityId(ComponentObject, 2, *WorkingSetParentId);
 		ComponentDatas.Add(WorkingSet);
  	}
 

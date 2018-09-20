@@ -214,16 +214,6 @@ int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Clas
 	}
 	Writer.Outdent().Print("}");
 
-	// Working set classes
-	if (WorkingSetClasses.Contains(Class))
-	{
-		Writer.Printf("component %s {", *WorkingSetDataName(Class));
-		Writer.Indent();
-		Writer.Printf("id = %d;", IdGenerator.GetNextAvailableId());
-		Writer.Printf("EntityId parent_id = 1;");
-		Writer.Outdent().Print("}");
-	}
-
 	// RPC components.
 	FUnrealRPCsByType RPCsByType = GetAllRPCsByType(TypeInfo);
 

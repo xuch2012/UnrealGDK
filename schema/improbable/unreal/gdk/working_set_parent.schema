@@ -1,8 +1,0 @@
-// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
-package improbable.unreal;
-
-component ChildInformation
-{
-    id = 100009;
-    list<EntityId> children = 1;
-}

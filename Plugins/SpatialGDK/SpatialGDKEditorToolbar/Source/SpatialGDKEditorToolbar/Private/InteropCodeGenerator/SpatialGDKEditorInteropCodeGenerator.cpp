@@ -155,10 +155,6 @@ void CreateSchemaDatabase(TArray<UClass*> Classes)
 			SchemaData.SingleClientRepData = ComponentId++;
 			SchemaData.MultiClientRepData = ComponentId++;
 			SchemaData.HandoverData = ComponentId++;
-			if (IsValidWorkingSetClass(Class))
-			{
-				SchemaData.WorkingSetData = ComponentId++;
-			}
 			SchemaData.ClientRPCs = ComponentId++;
 			SchemaData.ServerRPCs = ComponentId++;
 			SchemaData.CrossServerRPCs = ComponentId++;

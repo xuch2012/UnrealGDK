@@ -290,7 +290,7 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 		// Potentially we could split out the initial actor state and the initial component state
 		for (PendingAddComponentWrapper& PendingAddComponent : PendingAddComponents)
 		{
-			if (PendingAddComponent.EntityId == EntityId && PendingAddComponent.Data.IsValid() && PendingAddComponent.Data->bIsDynamic)
+			if (PendingAddComponent.EntityId == EntityId && PendingAddComponent.Data.IsValid() && PendingAddComponent.Data->bIsDynamic && PendingAddComponent.ComponentId != SpatialConstants::WORKING_SET_COMPONENT_ID)
 			{
 				ApplyComponentData(EntityId, *static_cast<DynamicComponent*>(PendingAddComponent.Data.Get())->Data, Channel);
 			}

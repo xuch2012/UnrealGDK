@@ -35,7 +35,7 @@ struct FWorkingSetData
 UCLASS()
 class SPATIALGDK_API UWorkingSetManager : public UObject
 {
-
+	 
 	GENERATED_BODY()
 
 public:

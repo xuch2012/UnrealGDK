@@ -1,0 +1,11 @@
+// Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+package improbable.unreal;
+
+import "improbable/unreal/gdk/core_types.schema";
+
+component WorkingSetInformation
+{
+    id = 100009;
+    list<EntityId> child_references = 1;
+    EntityId parent_reference = 2;
+}
