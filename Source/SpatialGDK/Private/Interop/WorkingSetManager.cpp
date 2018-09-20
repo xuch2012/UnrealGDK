@@ -59,13 +59,12 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 		TArray<USpatialActorChannel*> ActorChannels = WorkingSetInitParams->ActorChannels;
 		FVector Location = WorkingSetInitParams->Location;
 		FWorkingSet WorkingSet = { FirstId, ActorChannels };
-
-		//Todo: async exec
-		Sender->SendCreateWorkingSetParentEntity(FirstId, Location, NumOfEntities);
+		TArray<Schema_EntityId> ChildEntityIds;
 
 		for (uint32 i = 0; i < NumOfEntities-1; i++) {
 			USpatialActorChannel* ActorChannel = ActorChannels[i];
 			CurrentWorkingSets.Add(ActorChannel, WorkingSet);
+			ChildEntityIds.Add(ActorChannel->GetEntityId());
 			Sender->SendCreateEntityRequest(ActorChannel,
 				Location,
 				WorkingSetInitParams->PlayerWorkerId[i],
@@ -73,6 +72,9 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 				WorkingSetInitParams->HandoverData[i],
 				&FirstId);
 		}
+
+		//Todo: async exec
+		Sender->SendCreateWorkingSetParentEntity(ChildEntityIds.GetData(), Location, ChildEntityIds.Num(), &FirstId);
 
 		PendingWorkingSetCreationRequests.Remove(RequestId);
 	}

@@ -55,7 +55,7 @@ public:
 	void SendReserveEntityIdRequest(USpatialActorChannel* Channel);
 	Worker_RequestId SendReserveEntityIdsRequest(const uint32& NumOfEntities);
 	void SendCreateEntityRequest(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, const Worker_EntityId* WorkingSetParentId);
-	void SendCreateWorkingSetParentEntity(const Worker_EntityId& EntitiyId, const FVector& Location, const uint32& WorkingSetSize);
+	void SendCreateWorkingSetParentEntity(const Schema_EntityId* EntityId, const FVector& Location, const uint32& WorkingSetSize, const Worker_EntityId* ParentEntityId);
 	void SendDeleteEntityRequest(Worker_EntityId EntityId);
 
 	void ResolveOutgoingOperations(UObject* Object);

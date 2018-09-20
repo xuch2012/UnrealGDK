@@ -64,6 +64,7 @@ inline void Schema_AddWorkerRequirementSet(Schema_Object* Object, Schema_FieldId
 	}
 }
 
+
 inline WorkerRequirementSet Schema_GetWorkerRequirementSet(Schema_Object* Object, Schema_FieldId Id)
 {
 	Schema_Object* RequirementSetObject = Schema_GetObject(Object, Id);

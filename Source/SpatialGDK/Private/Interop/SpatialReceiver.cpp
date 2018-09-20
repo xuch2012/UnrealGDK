@@ -68,7 +68,7 @@ void USpatialReceiver::LeaveCriticalSection()
 	UE_LOG(LogTemp, Log, TEXT("SpatialReceiver: Leaving critical section."));
 	check(bInCriticalSection);
 
-	// Add entities.
+	// Add entities. Alter with working set
 	for (Worker_EntityId& PendingAddEntity : PendingAddEntities)
 	{
 		CreateActor(PendingAddEntity);
