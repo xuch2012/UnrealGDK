@@ -82,7 +82,7 @@ public:
 	void QueueActorSpawn(const Worker_EntityId& EntityId, const WorkingSet& WorkingSetData);
 
 private:
-	 
+
 	USpatialSender* Sender;
 	USpatialReceiver* Receiver;
 	USpatialNetDriver* NetDriver;
@@ -92,7 +92,7 @@ private:
 
 	//working set spawning
 	TMap<FWorkingSetSpawnData, TArray<FWorkingSetSpawnData>> PendingSpawningSets;
-	TArray<FWorkingSetSpawnData> ActorSpawnQueue;
+	TQueue<FWorkingSetSpawnData> ActorSpawnQueue;
 
 	bool IsReadyForReplication(const FWorkingSetSpawnData& EntityId);
 	const FWorkingSetSpawnData* GetWorkingSetDataByEntityId(const Worker_EntityId& EntityId);

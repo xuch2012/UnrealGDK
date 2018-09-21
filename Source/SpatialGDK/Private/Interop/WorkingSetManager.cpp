@@ -9,7 +9,6 @@ void UWorkingSetManager::Init(USpatialNetDriver* NetDriver)
 	this->NetDriver = NetDriver;
 	Sender = NetDriver->Sender;
 	Receiver = NetDriver->Receiver;
-	
 }
 
 void UWorkingSetManager::CreateWorkingSet(TArray<USpatialActorChannel*> Channels, const FVector& Location, const TArray<FString>& PlayerWorkerId, const TArray<TArray<uint16>>& RepChanged, const TArray<TArray<uint16>>& HandoverChanged)
@@ -143,15 +142,32 @@ void UWorkingSetManager::AddParent(const Worker_EntityId& EntityId, const Workin
 
 	// Collect existing entities that are waiting for parent
 	TArray<FWorkingSetSpawnData> StoredChildren;
-	for (FWorkingSetSpawnData QueuedActor : ActorSpawnQueue)
+	FWorkingSetSpawnData* FirstRequeuedData = nullptr;
+	FWorkingSetSpawnData CurrentData;
+
+	while (ActorSpawnQueue.Dequeue(CurrentData) && !(FirstRequeuedData && (CurrentData == *FirstRequeuedData)))
 	{
-		if (ParentData.ChildReferences.Contains(QueuedActor.EntityId)) {
-			StoredChildren.Add(QueuedActor);
-			ActorSpawnQueue.Remove(QueuedActor);
+		if (ParentData.ChildReferences.Contains(CurrentData.EntityId))
+		{
+			StoredChildren.Add(CurrentData);
+		}
+		else
+		{
+			ActorSpawnQueue.Enqueue(CurrentData);
+
+			//uninitialized struct
+			if (!FirstRequeuedData)
+			{
+				FirstRequeuedData = &CurrentData;
+			}
 		}
 	}
 
 	PendingSpawningSets.Add(SpawnData, StoredChildren);
+	if (IsReadyForReplication(SpawnData))
+	{
+		SpawnAndCleanActors(SpawnData);
+	}
 }
 
 void UWorkingSetManager::QueueActorSpawn(const Worker_EntityId & EntityId, const WorkingSet& WorkingSetData)
@@ -167,7 +183,7 @@ void UWorkingSetManager::QueueActorSpawn(const Worker_EntityId & EntityId, const
 	}
 	else
 	{
-		ActorSpawnQueue.Add(SpawnData);
+		ActorSpawnQueue.Enqueue(SpawnData);
 	}
 }
 
@@ -211,6 +227,7 @@ void UWorkingSetManager::SpawnAndCleanActors(const FWorkingSetSpawnData & Parent
 	for (const FWorkingSetSpawnData& SpawningChild : *ChildSpawnData)
 	{
 		Receiver->CreateActor(SpawningChild.EntityId);
+		Receiver->CleanWorkingSetAddComponents(SpawningChild.EntityId);
 	}
 	PendingSpawningSets.Remove(ParentSpawnData);
 }

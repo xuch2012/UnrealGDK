@@ -103,12 +103,14 @@ public:
 	void ProcessQueuedResolvedObjects();
 	void ResolvePendingOperations(UObject* Object, const UnrealObjectRef& ObjectRef);
 	void QueueIncomingRepUpdates(FChannelObjectPair ChannelObjectPair, const FObjectReferencesMap& ObjectReferencesMap, const TSet<UnrealObjectRef>& UnresolvedRefs);
+	void CleanWorkingSetAddComponents(Worker_EntityId EntityId);
 
 private:
 	void EnterCriticalSection();
 	void LeaveCriticalSection();
 
 	void CreateWorkingSetActor(Worker_EntityId EntityId);
+	void QueueWorkingSetAddComponents(Worker_EntityId EntityId);
 
 	void RemoveActor(Worker_EntityId EntityId);
 	AActor* SpawnNewEntity(Position* PositionComponent, UClass* ActorClass, bool bDeferred);
@@ -147,7 +149,12 @@ private:
 
 	bool bInCriticalSection;
 	TArray<Worker_EntityId> PendingAddEntities;
+
 	TArray<PendingAddComponentWrapper> PendingAddComponents;
+	TArray<PendingAddComponentWrapper> PendingWorkingSetAddComponents;
+	TArray<Worker_CommandRequest> PendingWorkingSetCommandRequests;
+
+
 	TArray<Worker_EntityId> PendingRemoveEntities;
 
 

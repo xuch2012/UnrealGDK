@@ -217,11 +217,12 @@ struct WorkingSet : Component
 		Schema_Object* ComponentObject = Schema_GetComponentDataFields(Data.schema_type);
 
 		uint32 SpatialChildEntityCount = Schema_GetEntityIdCount(ComponentObject, 1);
-		Schema_EntityId* SpatialChildEntityReferences = nullptr;
-
-		Schema_GetEntityIdList(ComponentObject, 1, SpatialChildEntityReferences);
-
-		ChildReferences = TArray<Worker_EntityId>(SpatialChildEntityReferences, SpatialChildEntityCount);
+		if(SpatialChildEntityCount > 0)
+		{
+			Schema_EntityId* SpatialChildEntityReferences = new Schema_EntityId[SpatialChildEntityCount];
+			Schema_GetEntityIdList(ComponentObject, 1, SpatialChildEntityReferences);
+			ChildReferences = TArray<Worker_EntityId>(SpatialChildEntityReferences, SpatialChildEntityCount);
+		}
 		ParentReference = Schema_GetEntityId(ComponentObject, 2);
 	}
 
@@ -232,7 +233,6 @@ struct WorkingSet : Component
 		return ChildReferences.Num() > 0;
 	}
 
-	Worker_EntityId EntityId;
 	Worker_EntityId ParentReference;
 	TArray<Worker_EntityId> ChildReferences;
 };

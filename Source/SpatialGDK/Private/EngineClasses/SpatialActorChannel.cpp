@@ -355,6 +355,7 @@ bool USpatialActorChannel::ReplicateActor()
 
 			// Calculate initial spatial position (but don't send component update) and create the entity.
 			LastSpatialPosition = GetActorSpatialPosition(Actor);
+
 			if (IsAValidWorkingSet(Actor->GetClass()))
 			{
 				if (WorkingSetId < 0)

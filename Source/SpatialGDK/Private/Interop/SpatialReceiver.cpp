@@ -30,6 +30,14 @@ T* GetComponentData(USpatialReceiver& Receiver, Worker_EntityId EntityId)
 		}
 	}
 
+	for (PendingAddComponentWrapper& PendingAddComponent : Receiver.PendingWorkingSetAddComponents)
+	{
+		if (PendingAddComponent.EntityId == EntityId && PendingAddComponent.ComponentId == T::ComponentId)
+		{
+			return static_cast<T*>(PendingAddComponent.Data.Get());
+		}
+	}
+
 	return nullptr;
 }
 
@@ -340,11 +348,23 @@ void USpatialReceiver::CreateWorkingSetActor(Worker_EntityId EntityId)
 	//change to correctly check for data
 	if (WorkingSet* WorkingSetComponent = GetComponentData<WorkingSet>(*this, EntityId))
 	{
+		QueueWorkingSetAddComponents(EntityId);
 		WorkingSetManager->QueueActorSpawn(EntityId, *WorkingSetComponent);
 	}
 	else
 	{
 		CreateActor(EntityId);
+	}
+}
+
+void USpatialReceiver::QueueWorkingSetAddComponents(Worker_EntityId EntityId)
+{
+	for (const PendingAddComponentWrapper& PendingAddComponent : PendingAddComponents)
+	{
+		if (EntityId == PendingAddComponent.EntityId)
+		{
+			PendingWorkingSetAddComponents.Add(PendingAddComponent);
+		}
 	}
 }
 
@@ -787,6 +807,14 @@ void USpatialReceiver::QueueIncomingRepUpdates(FChannelObjectPair ChannelObjectP
 	}
 }
 
+void USpatialReceiver::CleanWorkingSetAddComponents(Worker_EntityId EntityId)
+{
+	PendingWorkingSetAddComponents.RemoveAllSwap([&EntityId](PendingAddComponentWrapper PendingAddComponent)
+	{
+		return PendingAddComponent.EntityId == EntityId;
+	});
+}
+
 void USpatialReceiver::ResolvePendingOperations_Internal(UObject* Object, const UnrealObjectRef& ObjectRef)
 {
 	UE_LOG(LogTemp, Log, TEXT("!!! Resolving pending object refs and RPCs which depend on object: %s %s."), *Object->GetName(), *ObjectRef.ToString());
@@ -968,7 +996,8 @@ void USpatialReceiver::ReceiveRPCCommandRequest(const Worker_CommandRequest& Com
 	if (!TargetNetGUID.IsValid())
 	{
 		// TODO: Handle RPC to unresolved object
-		checkNoEntry();
+		PendingWorkingSetCommandRequests.Add(CommandRequest);
+		return;
 	}
 
 	OutTargetObject = PackageMap->GetObjectFromNetGUID(TargetNetGUID, false);
