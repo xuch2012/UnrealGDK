@@ -322,12 +322,12 @@ void USpatialSender::SendCreateEntityRequest(USpatialActorChannel* Channel, cons
 
 void USpatialSender::SendCreateWorkingSetParentEntity(const Schema_EntityId* EntityId, const FVector& Location, const uint32& WorkingSetSize, const Worker_EntityId* ParentEntityId)
 {
-	const WorkerAttributeSet UnrealWorkerAttributeSet{ TArray<FString>{TEXT("UnrealWorker")} };
-	const WorkerAttributeSet UnrealClientAttributeSet{ TArray<FString>{TEXT("UnrealClient")} };
+	WorkerAttributeSet WorkerAttribute = { TEXT("UnrealWorker") };
+	WorkerAttributeSet ClientAttribute = { TEXT("UnrealClient") };
+	WorkerRequirementSet WorkersOnly = { WorkerAttribute };
+	WorkerRequirementSet ClientsOnly = { ClientAttribute };
 
-	const WorkerRequirementSet UnrealWorkerPermission{ { UnrealWorkerAttributeSet } };
-	const WorkerRequirementSet UnrealClientPermission{ { UnrealClientAttributeSet } };
-	const WorkerRequirementSet AnyWorkerPermission{ { UnrealClientAttributeSet, UnrealWorkerAttributeSet } };
+	WorkerRequirementSet AnyUnrealWorkerOrClient = { WorkerAttribute, ClientAttribute };
 
 	Worker_Entity WorkingSetParentEntity;
 	WorkingSetParentEntity.entity_id = *EntityId;
@@ -335,17 +335,18 @@ void USpatialSender::SendCreateWorkingSetParentEntity(const Schema_EntityId* Ent
 	TArray<Worker_ComponentData> Components;
 
 	WriteAclMap ComponentWriteAcl;
-	ComponentWriteAcl.Add(POSITION_COMPONENT_ID, UnrealWorkerPermission);
-	ComponentWriteAcl.Add(METADATA_COMPONENT_ID, UnrealWorkerPermission);
-	ComponentWriteAcl.Add(PERSISTENCE_COMPONENT_ID, UnrealWorkerPermission);
-	ComponentWriteAcl.Add(UNREAL_METADATA_COMPONENT_ID, UnrealWorkerPermission);
-	ComponentWriteAcl.Add(ENTITY_ACL_COMPONENT_ID, UnrealWorkerPermission);
+	ComponentWriteAcl.Add(POSITION_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(METADATA_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(PERSISTENCE_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(UNREAL_METADATA_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(ENTITY_ACL_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(WORKING_SET_COMPONENT_ID, WorkersOnly);
 
 	Components.Add(Position(Coordinates::FromFVector(Location)).CreatePositionData());
 	Components.Add(Metadata(TEXT("WorkingSetParent")).CreateMetadataData());
 	Components.Add(Persistence().CreatePersistenceData());
 	Components.Add(UnrealMetadata().CreateUnrealMetadataData());
-	Components.Add(EntityAcl(UnrealWorkerPermission, ComponentWriteAcl).CreateEntityAclData());
+	Components.Add(EntityAcl(AnyUnrealWorkerOrClient, ComponentWriteAcl).CreateEntityAclData());
 
 	//Add entity ids
 	Worker_ComponentData Data;
