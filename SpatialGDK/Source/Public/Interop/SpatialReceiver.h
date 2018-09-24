@@ -114,10 +114,14 @@ public:
 	void OnCreateEntityIdResponse(Worker_CreateEntityResponseOp& Op);
 	void AddPendingActorRequest(Worker_RequestId RequestId, USpatialActorChannel* Channel);
 
+	void OnEntityQueryResponse(Worker_EntityQueryResponseOp& Op);
+
 	void CleanupDeletedEntity(Worker_EntityId EntityId);
 
 	void ProcessQueuedResolvedObjects();
 	void ResolvePendingOperations(UObject* Object, const UnrealObjectRef& ObjectRef);
+
+	TArray<EntityQueryFunction> EntityQueryFunctions;
 
 private:
 	void EnterCriticalSection();

@@ -690,6 +690,14 @@ void USpatialReceiver::AddPendingActorRequest(Worker_RequestId RequestId, USpati
 	PendingActorRequests.Add(RequestId, Channel);
 }
 
+void USpatialReceiver::OnEntityQueryResponse(Worker_EntityQueryResponseOp& Op)
+{
+	for (EntityQueryFunction Func : EntityQueryFunctions)
+	{
+		Func(Op);
+	}
+}
+
 USpatialActorChannel* USpatialReceiver::PopPendingActorRequest(Worker_RequestId RequestId)
 {
 	USpatialActorChannel** ChannelPtr = PendingActorRequests.Find(RequestId);

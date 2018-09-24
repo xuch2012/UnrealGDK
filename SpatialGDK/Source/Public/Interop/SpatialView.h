@@ -19,6 +19,10 @@ class USpatialNetDriver;
 class USpatialReceiver;
 class USpatialSender;
 
+//DECLARE_DELEGATE_OneParam(EntityQueryDelegate, const Worker_EntityQueryResponseOp&);
+typedef TFunction<void(const Worker_EntityQueryResponseOp&)> EntityQueryFunction;
+//typedef void(*EntityQueryFunction)(const Worker_EntityQueryResponseOp&);
+
 UCLASS()
 class SPATIALGDK_API USpatialView : public UObject
 {
@@ -31,6 +35,7 @@ public:
 	Worker_Authority GetAuthority(Worker_EntityId EntityId, Worker_ComponentId ComponentId);
 	improbable::UnrealMetadata* GetUnrealMetadata(Worker_EntityId EntityId);
 	improbable::EntityAcl* GetEntityACL(Worker_EntityId EntityId);
+	void AddEntityQueryResponse(EntityQueryFunction);
 
 private:
 	void OnAddComponent(const Worker_AddComponentOp& Op);
