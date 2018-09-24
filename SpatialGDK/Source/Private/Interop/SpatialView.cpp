@@ -77,6 +77,7 @@ void USpatialView::ProcessOps(Worker_OpList* OpList)
 		case WORKER_OP_TYPE_DELETE_ENTITY_RESPONSE:
 			break;
 		case WORKER_OP_TYPE_ENTITY_QUERY_RESPONSE:
+			Receiver->OnEntityQueryResponse(Op->entity_query_response);
 			break;
 
 		case WORKER_OP_TYPE_FLAG_UPDATE:
@@ -189,4 +190,9 @@ void USpatialView::OnComponentUpdate(const Worker_ComponentUpdateOp& Op)
 void USpatialView::OnAuthorityChange(const Worker_AuthorityChangeOp& Op)
 {
 	EntityComponentAuthorityMap.FindOrAdd(Op.entity_id).FindOrAdd(Op.component_id) = (Worker_Authority)Op.authority;
+}
+
+void USpatialView::AddEntityQueryResponse(EntityQueryFunction Func)
+{
+	Receiver->EntityQueryFunctions.Add(Func);
 }
