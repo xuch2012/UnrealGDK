@@ -335,12 +335,12 @@ void USpatialSender::SendCreateWorkingSetParentEntity(const Schema_EntityId* Ent
 	TArray<Worker_ComponentData> Components;
 
 	WriteAclMap ComponentWriteAcl;
-	ComponentWriteAcl.Add(POSITION_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(POSITION_COMPONENT_ID, AnyUnrealWorkerOrClient);
 	ComponentWriteAcl.Add(METADATA_COMPONENT_ID, WorkersOnly);
 	ComponentWriteAcl.Add(PERSISTENCE_COMPONENT_ID, WorkersOnly);
 	ComponentWriteAcl.Add(UNREAL_METADATA_COMPONENT_ID, WorkersOnly);
 	ComponentWriteAcl.Add(ENTITY_ACL_COMPONENT_ID, WorkersOnly);
-	ComponentWriteAcl.Add(WORKING_SET_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(WORKING_SET_COMPONENT_ID, AnyUnrealWorkerOrClient);
 
 	Components.Add(Position(Coordinates::FromFVector(Location)).CreatePositionData());
 	Components.Add(Metadata(TEXT("WorkingSetParent")).CreateMetadataData());

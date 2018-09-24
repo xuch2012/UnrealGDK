@@ -20,6 +20,12 @@ struct FWorkingSet
 
 	Worker_EntityId ParentId;
 	TArray<USpatialActorChannel*> ActorChannels;
+
+	FWorkingSet()
+	{}
+
+	FWorkingSet(const Worker_EntityId& EntityId, const TArray<USpatialActorChannel*>& Channels) : ParentId(EntityId), ActorChannels(Channels)
+	{}
 };
 
 USTRUCT()
@@ -81,12 +87,15 @@ public:
 	void AddParent(const Worker_EntityId& EntityId, const WorkingSet& ParentData);
 	void QueueActorSpawn(const Worker_EntityId& EntityId, const WorkingSet& WorkingSetData);
 
+	bool IsCurrentWorkingSetActor(const Worker_EntityId& EntityId);
+	void AddCurrentWorkingSetChannel(const Worker_EntityId& EntityId, USpatialActorChannel* Channel);
 private:
 
 	USpatialSender* Sender;
 	USpatialReceiver* Receiver;
 	USpatialNetDriver* NetDriver;
-	TMap<USpatialActorChannel*, FWorkingSet> CurrentWorkingSets;
+	TMap<USpatialActorChannel*, FWorkingSet*> CurrentWorkingSets;
+	TMap<Worker_EntityId, FWorkingSet*> CurrentPendingWorkingSetCreations;
 	TMap<Worker_RequestId, FWorkingSetData> PendingWorkingSetCreationRequests;
 	TMap<uint32, FWorkingSetData> PendingWorkingSets;
 

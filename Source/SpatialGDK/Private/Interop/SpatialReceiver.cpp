@@ -314,6 +314,20 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 			}
 		}
 
+		// Apply initial replicated properties.
+		// This was moved to after FinishingSpawning because components existing only in blueprints aren't added until spawning is complete
+		// Potentially we could split out the initial actor state and the initial component state
+		for (PendingAddComponentWrapper& PendingAddComponent : PendingWorkingSetAddComponents)
+		{
+			if (PendingAddComponent.EntityId == EntityId && PendingAddComponent.Data.IsValid() && PendingAddComponent.Data->bIsDynamic && PendingAddComponent.ComponentId != SpatialConstants::WORKING_SET_COMPONENT_ID)
+			{
+				ApplyComponentData(EntityId, *static_cast<DynamicComponent*>(PendingAddComponent.Data.Get())->Data, Channel);
+			}
+		}
+
+
+
+
 		// Update interest on the entity's components after receiving initial component data (so Role and RemoteRole are properly set).
 		//NetDriver->GetSpatialInterop()->SendComponentInterests(Channel, EntityId.ToSpatialEntityId());
 
@@ -337,6 +351,11 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 			// Call PostNetInit on client only.
 			EntityActor->PostNetInit();
 		}
+	}
+
+	if(WorkingSetManager->IsCurrentWorkingSetActor(EntityId))
+	{
+		WorkingSetManager->AddCurrentWorkingSetChannel(EntityId, NetDriver->GetActorChannelByEntityId(EntityId));
 	}
 }
 

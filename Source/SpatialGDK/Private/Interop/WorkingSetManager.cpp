@@ -34,13 +34,13 @@ void UWorkingSetManager::CreateWorkingSet(const uint32 & WorkingSetId)
 
 void UWorkingSetManager::SendPositionUpdate(const USpatialActorChannel* ActorChannel, const FVector& Loction)
 {
-	if (FWorkingSet* Data = CurrentWorkingSets.Find(ActorChannel))
+	if (FWorkingSet** Data = CurrentWorkingSets.Find(ActorChannel))
 	{
 		// Update parent
-		Sender->SendPositionUpdate(Data->ParentId, Loction);
+		Sender->SendPositionUpdate((*Data)->ParentId, Loction);
 
 		// update children
-		for (USpatialActorChannel* Channel : Data->ActorChannels)
+		for (USpatialActorChannel* Channel : (*Data)->ActorChannels)
 		{
 			Sender->SendPositionUpdate(Channel->GetEntityId(), Loction);
 		}
@@ -58,7 +58,7 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 	{
 		TArray<USpatialActorChannel*> ActorChannels = WorkingSetInitParams->ActorChannels;
 		FVector Location = WorkingSetInitParams->Location;
-		FWorkingSet WorkingSet = { FirstId, ActorChannels };
+		FWorkingSet* WorkingSet = new FWorkingSet(FirstId, ActorChannels);
 		TArray<Schema_EntityId> ChildEntityIds;
 
 		for (uint32 i = 0; i < NumOfEntities-1; i++) {
@@ -187,6 +187,24 @@ void UWorkingSetManager::QueueActorSpawn(const Worker_EntityId & EntityId, const
 	}
 }
 
+bool UWorkingSetManager::IsCurrentWorkingSetActor(const Worker_EntityId & EntityId)
+{
+	return CurrentPendingWorkingSetCreations.Contains(EntityId);
+}
+
+void UWorkingSetManager::AddCurrentWorkingSetChannel(const Worker_EntityId & EntityId, USpatialActorChannel * Channel)
+{
+	if (CurrentWorkingSets.Contains(Channel))
+	{
+		return;
+	}
+
+	FWorkingSet* WorkingSet = *CurrentPendingWorkingSetCreations.Find(EntityId);
+	WorkingSet->ActorChannels.Add(Channel);
+	CurrentWorkingSets.Add(Channel, WorkingSet);
+}
+
+
 bool UWorkingSetManager::IsReadyForReplication(const FWorkingSetSpawnData & ParentSpawnData)
 {
 	TArray<FWorkingSetSpawnData>* ChildSpawnData = PendingSpawningSets.Find(ParentSpawnData);
@@ -224,10 +242,17 @@ const FWorkingSetSpawnData* UWorkingSetManager::GetWorkingSetDataByEntityId(cons
 void UWorkingSetManager::SpawnAndCleanActors(const FWorkingSetSpawnData & ParentSpawnData)
 {
 	TArray<FWorkingSetSpawnData>* ChildSpawnData = PendingSpawningSets.Find(ParentSpawnData);
+	TArray<USpatialActorChannel*>* PendingChildren = new TArray<USpatialActorChannel *>();
+
+	FWorkingSet* WorkingSet = new FWorkingSet(ParentSpawnData.EntityId, *PendingChildren);
+
 	for (const FWorkingSetSpawnData& SpawningChild : *ChildSpawnData)
 	{
+		CurrentPendingWorkingSetCreations.Add(SpawningChild.EntityId, WorkingSet);
 		Receiver->CreateActor(SpawningChild.EntityId);
 		Receiver->CleanWorkingSetAddComponents(SpawningChild.EntityId);
 	}
+
+	CurrentPendingWorkingSetCreations.Empty();
 	PendingSpawningSets.Remove(ParentSpawnData);
 }
