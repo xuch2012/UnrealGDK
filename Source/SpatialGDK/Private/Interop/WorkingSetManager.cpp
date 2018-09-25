@@ -173,7 +173,7 @@ void UWorkingSetManager::AddParent(const Worker_EntityId& EntityId, const Workin
 void UWorkingSetManager::QueueActorSpawn(const Worker_EntityId & EntityId, const WorkingSet& WorkingSetData)
 {
 	FWorkingSetSpawnData SpawnData = { EntityId, WorkingSetData };
-	if (const FWorkingSetSpawnData* SpawningActorsParentId = GetWorkingSetDataByEntityId(EntityId))
+	if (const FWorkingSetSpawnData* SpawningActorsParentId = GetWorkingSetParentByEntityId(WorkingSetData.ParentReference))
 	{
 		PendingSpawningSets.Find(*SpawningActorsParentId)->Add(SpawnData);
 		if (IsReadyForReplication(*SpawningActorsParentId))
@@ -227,7 +227,7 @@ bool UWorkingSetManager::IsReadyForReplication(const FWorkingSetSpawnData & Pare
 	return true;
 }
 
-const FWorkingSetSpawnData* UWorkingSetManager::GetWorkingSetDataByEntityId(const Worker_EntityId & EntityId)
+const FWorkingSetSpawnData* UWorkingSetManager::GetWorkingSetParentByEntityId(const Worker_EntityId & EntityId)
 {
 	for (const auto& Entry : PendingSpawningSets)
 	{

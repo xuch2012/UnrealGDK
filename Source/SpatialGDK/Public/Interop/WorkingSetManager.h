@@ -88,7 +88,6 @@ public:
 	void QueueActorSpawn(const Worker_EntityId& EntityId, const WorkingSet& WorkingSetData);
 
 	bool IsCurrentWorkingSetActor(const Worker_EntityId& EntityId);
-	bool IsQueuedWorkingSetActor(const Worker_EntityId& EntityId);
 	void AddCurrentWorkingSetChannel(const Worker_EntityId& EntityId, USpatialActorChannel* Channel);
 private:
 
@@ -105,7 +104,7 @@ private:
 	TQueue<FWorkingSetSpawnData> ActorSpawnQueue;
 
 	bool IsReadyForReplication(const FWorkingSetSpawnData& EntityId);
-	const FWorkingSetSpawnData* GetWorkingSetDataByEntityId(const Worker_EntityId& EntityId);
+	const FWorkingSetSpawnData* GetWorkingSetParentByEntityId(const Worker_EntityId& EntityId);
 	void SpawnAndCleanActors(const FWorkingSetSpawnData& EntityId);
 
 	uint32 CurrentWorkingSetId;
