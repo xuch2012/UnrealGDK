@@ -88,6 +88,7 @@ public:
 	void QueueActorSpawn(const Worker_EntityId& EntityId, const WorkingSet& WorkingSetData);
 
 	bool IsCurrentWorkingSetActor(const Worker_EntityId& EntityId);
+	bool IsQueuedWorkingSetActor(const Worker_EntityId& EntityId);
 	void AddCurrentWorkingSetChannel(const Worker_EntityId& EntityId, USpatialActorChannel* Channel);
 private:
 

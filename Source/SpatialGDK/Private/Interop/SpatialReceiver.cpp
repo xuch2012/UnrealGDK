@@ -356,6 +356,16 @@ void USpatialReceiver::CreateActor(Worker_EntityId EntityId)
 	if(WorkingSetManager->IsCurrentWorkingSetActor(EntityId))
 	{
 		WorkingSetManager->AddCurrentWorkingSetChannel(EntityId, NetDriver->GetActorChannelByEntityId(EntityId));
+
+		for (Worker_ComponentUpdateOp& ComponentUpdate : PendingWorkingSetComponentUpdates)
+		{
+			if (ComponentUpdate.entity_id == EntityId)
+			{
+				OnComponentUpdate(ComponentUpdate);
+			}
+		}
+
+		CleanWorkingSetComponentUpdates(EntityId);
 	}
 }
 
@@ -564,6 +574,10 @@ void USpatialReceiver::OnComponentUpdate(Worker_ComponentUpdateOp& Op)
 		{
 			ApplyComponentUpdate(Op.update, TargetObject, ActorChannel);
 		}
+		else
+		{
+			PendingWorkingSetComponentUpdates.Add(Op);
+		}
 	}
 	else if (Op.update.component_id == Info->HandoverComponent)
 	{
@@ -722,6 +736,11 @@ UObject* USpatialReceiver::GetTargetObjectFromChannelAndClass(USpatialActorChann
 
 	if (Class->IsChildOf<AActor>())
 	{
+		// Actor queued for working sets
+		if (!Channel->Actor) {
+			return nullptr;
+		}
+
 		check(Channel->Actor->IsA(Class));
 		TargetObject = Channel->Actor;
 	}
@@ -831,6 +850,14 @@ void USpatialReceiver::CleanWorkingSetAddComponents(Worker_EntityId EntityId)
 	PendingWorkingSetAddComponents.RemoveAllSwap([&EntityId](PendingAddComponentWrapper PendingAddComponent)
 	{
 		return PendingAddComponent.EntityId == EntityId;
+	});
+}
+
+void USpatialReceiver::CleanWorkingSetComponentUpdates(Worker_EntityId EntityId)
+{
+	PendingWorkingSetComponentUpdates.RemoveAllSwap([&EntityId](Worker_ComponentUpdateOp PendingComponentUpdate)
+	{
+		return PendingComponentUpdate.entity_id == EntityId;
 	});
 }
 

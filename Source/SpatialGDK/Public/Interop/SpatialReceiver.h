@@ -104,6 +104,8 @@ public:
 	void ResolvePendingOperations(UObject* Object, const UnrealObjectRef& ObjectRef);
 	void QueueIncomingRepUpdates(FChannelObjectPair ChannelObjectPair, const FObjectReferencesMap& ObjectReferencesMap, const TSet<UnrealObjectRef>& UnresolvedRefs);
 	void CleanWorkingSetAddComponents(Worker_EntityId EntityId);
+	void CleanWorkingSetComponentUpdates(Worker_EntityId EntityId);
+
 
 private:
 	void EnterCriticalSection();
@@ -153,6 +155,8 @@ private:
 	TArray<PendingAddComponentWrapper> PendingAddComponents;
 	TArray<PendingAddComponentWrapper> PendingWorkingSetAddComponents;
 	TArray<Worker_CommandRequest> PendingWorkingSetCommandRequests;
+	TArray<Worker_ComponentUpdateOp> PendingWorkingSetComponentUpdates;
+
 
 
 	TArray<Worker_EntityId> PendingRemoveEntities;
