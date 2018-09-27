@@ -303,13 +303,6 @@ bool USpatialActorChannel::ReplicateActor()
 			// TODO: This check potentially isn't needed any more due to deleting startup actors but need to check - UNR:580
 			//check(!Actor->IsFullNameStableForNetworking());
 
-			// Ensure that the initial changelist contains _every_ property. This ensures that the default properties are written to the entity template.
-			// Otherwise, there will be a mismatch between the rep state shadow data used by CompareProperties and the entity in SpatialOS.
-			TArray<uint16> InitialRepChanged = GetAllPropertyHandles(*ActorReplicator);
-
-			// Calculate initial spatial position (but don't send component update) and create the entity.
-			LastSpatialPosition = GetActorSpatialPosition(Actor);
-
 			if (IsAValidWorkingSet(Actor->GetClass()))
 			{
 				if (WorkingSetId < 0)
@@ -317,7 +310,7 @@ bool USpatialActorChannel::ReplicateActor()
 					WorkingSetId = WorkingSetManager->RegisterNewWorkingSet();
 				}
 
-				WorkingSetManager->EnqueueForWorkingSet(this, LastSpatialPosition, PlayerWorkerId, InitialRepChanged, HandoverChanged, WorkingSetId);
+				WorkingSetManager->EnqueueForWorkingSet(this, GetPlayerWorkerId(), WorkingSetId);
 
 				if (WorkingSetManager->GetWorkingSetSize(WorkingSetId) == 3)
 				{
@@ -610,7 +603,7 @@ void USpatialActorChannel::OnCreateEntityResponse(const Worker_CreateEntityRespo
 	if (Op.status_code != WORKER_STATUS_CODE_SUCCESS)
 	{
 		UE_LOG(LogSpatialActorChannel, Error, TEXT("Failed to create entity for actor %s: %s"), *Actor->GetName(), UTF8_TO_TCHAR(Op.message));
-		Sender->SendCreateEntityRequest(this, GetPlayerWorkerId());
+		Sender->SendCreateEntityRequest(this, GetPlayerWorkerId(), nullptr);
 		return;
 	}
 	UE_LOG(LogSpatialActorChannel, Verbose, TEXT("Created entity (%lld) for: %s."), EntityId, *Actor->GetName());

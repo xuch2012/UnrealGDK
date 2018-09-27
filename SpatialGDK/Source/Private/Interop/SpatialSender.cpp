@@ -119,7 +119,7 @@ Worker_RequestId USpatialSender::CreateEntity(const FString& ClientWorkerId, con
 	// Working set data
  	if (WorkingSetParentId)
  	{
-		ComponentWriteAcl.Add(SpatialConstants::WORKING_SET_COMPONENT_ID, WorkersOnly);
+		ComponentWriteAcl.Add(SpatialConstants::WORKING_SET_COMPONENT_ID, ServersOnly);
 		Worker_ComponentData WorkingSet = {};
  		WorkingSet.component_id = SpatialConstants::WORKING_SET_COMPONENT_ID;
 		WorkingSet.schema_type = Schema_CreateComponentData(SpatialConstants::WORKING_SET_COMPONENT_ID);
@@ -389,12 +389,12 @@ void USpatialSender::SendCreateWorkingSetParentEntity(const Schema_EntityId* Ent
 	TArray<Worker_ComponentData> Components;
 
 	WriteAclMap ComponentWriteAcl;
-	ComponentWriteAcl.Add(POSITION_COMPONENT_ID, AnyUnrealWorkerOrClient);
-	ComponentWriteAcl.Add(METADATA_COMPONENT_ID, WorkersOnly);
-	ComponentWriteAcl.Add(PERSISTENCE_COMPONENT_ID, WorkersOnly);
-	ComponentWriteAcl.Add(UNREAL_METADATA_COMPONENT_ID, WorkersOnly);
-	ComponentWriteAcl.Add(ENTITY_ACL_COMPONENT_ID, WorkersOnly);
-	ComponentWriteAcl.Add(WORKING_SET_COMPONENT_ID, AnyUnrealWorkerOrClient);
+	ComponentWriteAcl.Add(SpatialConstants::POSITION_COMPONENT_ID, AnyUnrealWorkerOrClient);
+	ComponentWriteAcl.Add(SpatialConstants::METADATA_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(SpatialConstants::PERSISTENCE_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(SpatialConstants::UNREAL_METADATA_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(SpatialConstants::ENTITY_ACL_COMPONENT_ID, WorkersOnly);
+	ComponentWriteAcl.Add(SpatialConstants::WORKING_SET_COMPONENT_ID, AnyUnrealWorkerOrClient);
 
 	Components.Add(improbable::Position(Coordinates::FromFVector(Location)).CreatePositionData());
 	Components.Add(improbable::Metadata(TEXT("WorkingSetParent")).CreateMetadataData());

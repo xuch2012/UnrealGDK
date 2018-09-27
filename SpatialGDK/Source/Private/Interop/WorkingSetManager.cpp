@@ -11,14 +11,6 @@ void UWorkingSetManager::Init(USpatialNetDriver* NetDriver)
 	Receiver = NetDriver->Receiver;
 }
 
-void UWorkingSetManager::CreateWorkingSet(TArray<USpatialActorChannel*> Channels, const FVector& Location, const TArray<FString>& PlayerWorkerId, const TArray<TArray<uint16>>& RepChanged, const TArray<TArray<uint16>>& HandoverChanged)
-{
-	FWorkingSetData Data = { Channels, Location, PlayerWorkerId, RepChanged, HandoverChanged };
-
-	//Reserve ids for working set and the parent
-	PendingWorkingSetCreationRequests.Add(Sender->SendReserveEntityIdsRequest(Channels.Num()+1), Data);
-}
-
 //todo
 void UWorkingSetManager::CreateWorkingSet(const uint32 & WorkingSetId)
 {
@@ -57,7 +49,6 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 	if (FWorkingSetData* WorkingSetInitParams = PendingWorkingSetCreationRequests.Find(RequestId))
 	{
 		TArray<USpatialActorChannel*> ActorChannels = WorkingSetInitParams->ActorChannels;
-		FVector Location = WorkingSetInitParams->Location;
 		FWorkingSet* WorkingSet = new FWorkingSet(FirstId, ActorChannels);
 		TArray<Schema_EntityId> ChildEntityIds;
 
@@ -65,16 +56,11 @@ void UWorkingSetManager::ProcessWorkingSet(const Worker_EntityId& FirstId, const
 			USpatialActorChannel* ActorChannel = ActorChannels[i];
 			CurrentWorkingSets.Add(ActorChannel, WorkingSet);
 			ChildEntityIds.Add(ActorChannel->GetEntityId());
-			Sender->SendCreateEntityRequest(ActorChannel,
-				Location,
-				WorkingSetInitParams->PlayerWorkerId[i],
-				WorkingSetInitParams->RepChangedData[i],
-				WorkingSetInitParams->HandoverData[i],
-				&FirstId);
+			Sender->SendCreateEntityRequest(ActorChannel, WorkingSetInitParams->PlayerWorkerId[i], &FirstId);
 		}
 
 		//Todo: async exec
-		Sender->SendCreateWorkingSetParentEntity(ChildEntityIds.GetData(), Location, ChildEntityIds.Num(), &FirstId);
+		Sender->SendCreateWorkingSetParentEntity(ChildEntityIds.GetData(), ActorChannels[0]->GetActorSpatialPosition(ActorChannels[0]->Actor), ChildEntityIds.Num(), &FirstId);
 
 		PendingWorkingSetCreationRequests.Remove(RequestId);
 	}
@@ -101,18 +87,15 @@ uint32 UWorkingSetManager::RegisterNewWorkingSet()
 	}
 
 	TArray<USpatialActorChannel*> ActorChannels;
-	FVector Location;
 	TArray<FString> PlayerWorkerId;
-	TArray<TArray<uint16>> RepChangedData;
-	TArray<TArray<uint16>> HandoverData;
 
 	//CurrentWorkingSetId++;
-	PendingWorkingSets.Add(CurrentWorkingSetId, { ActorChannels, Location, PlayerWorkerId, RepChangedData, HandoverData });
+	PendingWorkingSets.Add(CurrentWorkingSetId, { ActorChannels, PlayerWorkerId });
 	return CurrentWorkingSetId;
 }
 
 //todo
-void UWorkingSetManager::EnqueueForWorkingSet(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, const uint32& WorkingSetId)
+void UWorkingSetManager::EnqueueForWorkingSet(USpatialActorChannel* Channel, const FString& PlayerWorkerId, const uint32& WorkingSetId)
 {
 	if (!PendingWorkingSets.Contains(WorkingSetId))
 	{
@@ -122,12 +105,9 @@ void UWorkingSetManager::EnqueueForWorkingSet(USpatialActorChannel* Channel, con
 
 	FWorkingSetData* WorkingSetData = PendingWorkingSets.Find(WorkingSetId);
 	//overrides location, change with support of multiple locations
-	WorkingSetData->Location = Location;
 
 	WorkingSetData->ActorChannels.Add(Channel);
 	WorkingSetData->PlayerWorkerId.Add(PlayerWorkerId);
-	WorkingSetData->RepChangedData.Add(RepChanged);
-	WorkingSetData->HandoverData.Add(HandoverChanged);
 }
 
 void UWorkingSetManager::AddParent(const Worker_EntityId& EntityId, const WorkingSet & ParentData)
@@ -249,7 +229,7 @@ void UWorkingSetManager::SpawnAndCleanActors(const FWorkingSetSpawnData & Parent
 	for (const FWorkingSetSpawnData& SpawningChild : *ChildSpawnData)
 	{
 		CurrentPendingWorkingSetCreations.Add(SpawningChild.EntityId, WorkingSet);
-		Receiver->CreateActor(SpawningChild.EntityId);
+		Receiver->ReceiveActor(SpawningChild.EntityId);
 		Receiver->CleanWorkingSetAddComponents(SpawningChild.EntityId);
 	}
 

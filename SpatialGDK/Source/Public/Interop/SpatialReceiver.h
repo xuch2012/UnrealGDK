@@ -122,7 +122,7 @@ public:
 
 	void ProcessQueuedResolvedObjects();
 	void ResolvePendingOperations(UObject* Object, const UnrealObjectRef& ObjectRef);
-	void QueueIncomingRepUpdates(FChannelObjectPair ChannelObjectPair, const FObjectReferencesMap& ObjectReferencesMap, const TSet<UnrealObjectRef>& UnresolvedRefs);
+	void ReceiveActor(Worker_EntityId EntityId);
 	void CleanWorkingSetAddComponents(Worker_EntityId EntityId);
 	void CleanWorkingSetComponentUpdates(Worker_EntityId EntityId);
 
@@ -133,7 +133,6 @@ private:
 	void CreateWorkingSetActor(Worker_EntityId EntityId);
 	void QueueWorkingSetAddComponents(Worker_EntityId EntityId);
 
-	void ReceiveActor(Worker_EntityId EntityId);
 	void RemoveActor(Worker_EntityId EntityId);
 	AActor* CreateActor(improbable::Position* Position, struct improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred);
 	UClass* GetNativeEntityClass(improbable::Metadata* Metadata);

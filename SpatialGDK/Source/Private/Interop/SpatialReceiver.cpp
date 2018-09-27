@@ -150,7 +150,7 @@ void USpatialReceiver::OnAddComponent(Worker_AddComponentOp& Op)
 		return;
 	case SpatialConstants::WORKING_SET_COMPONENT_ID:
 		{
-			WorkingSet WorkingSetComponent = WorkingSet(Op.data);
+			improbable::WorkingSet WorkingSetComponent = WorkingSet(Op.data);
 			if (WorkingSetComponent.isParentSet())
 			{
 				WorkingSetManager->AddParent(Op.entity_id, WorkingSetComponent);
@@ -350,14 +350,14 @@ void USpatialReceiver::CreateWorkingSetActor(Worker_EntityId EntityId)
 	check(NetDriver);
 
 	//change to correctly check for data
-	if (WorkingSet* WorkingSetComponent = GetComponentData<WorkingSet>(*this, EntityId))
+	if (improbable::WorkingSet* WorkingSetComponent = GetComponentData<WorkingSet>(*this, EntityId))
 	{
 		QueueWorkingSetAddComponents(EntityId);
 		WorkingSetManager->QueueActorSpawn(EntityId, *WorkingSetComponent);
 	}
 	else
 	{
-		CreateActor(EntityId);
+		ReceiveActor(EntityId);
 	}
 }
 

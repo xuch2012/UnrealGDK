@@ -34,7 +34,7 @@ struct FWorkingSetSpawnData
 	GENERATED_BODY()
 
 	Worker_EntityId EntityId;
-	WorkingSet WorkingSetData;
+	improbable::WorkingSet WorkingSetData;
 
 	bool operator==(const FWorkingSetSpawnData& Other) const
 	{
@@ -55,10 +55,7 @@ struct FWorkingSetData
 	GENERATED_BODY()
 
 	TArray<USpatialActorChannel*> ActorChannels;
-	FVector Location;
 	TArray<FString> PlayerWorkerId;
-	TArray<TArray<uint16>> RepChangedData;
-	TArray<TArray<uint16>> HandoverData;
 };
 
 UCLASS()
@@ -72,7 +69,6 @@ public:
 	void Init(USpatialNetDriver* NetDriver);
 
 	// Working set initialization
-	void CreateWorkingSet(TArray<USpatialActorChannel*> Channels, const FVector& Location, const TArray<FString>& PlayerWorkerId, const TArray<TArray<uint16>>& RepChanged, const TArray<TArray<uint16>>& HandoverChanged);
 	void CreateWorkingSet(const uint32& WorkingSetId);
 
 	// updates
@@ -82,10 +78,10 @@ public:
 	void ProcessWorkingSet(const Worker_EntityId& FirstId, const uint32& NumOfEntities, const Worker_RequestId& RequestId);
 	uint32 GetWorkingSetSize(const uint32& WorkingSetId);
 	uint32 RegisterNewWorkingSet();
-	void EnqueueForWorkingSet(USpatialActorChannel* Channel, const FVector& Location, const FString& PlayerWorkerId, const TArray<uint16>& RepChanged, const TArray<uint16>& HandoverChanged, const uint32& WorkingSetId);
+	void EnqueueForWorkingSet(USpatialActorChannel* Channel, const FString& PlayerWorkerId, const uint32& WorkingSetId);
 
-	void AddParent(const Worker_EntityId& EntityId, const WorkingSet& ParentData);
-	void QueueActorSpawn(const Worker_EntityId& EntityId, const WorkingSet& WorkingSetData);
+	void AddParent(const Worker_EntityId& EntityId, const improbable::WorkingSet& ParentData);
+	void QueueActorSpawn(const Worker_EntityId& EntityId, const improbable::WorkingSet& WorkingSetData);
 
 	bool IsCurrentWorkingSetActor(const Worker_EntityId& EntityId);
 	void AddCurrentWorkingSetChannel(const Worker_EntityId& EntityId, USpatialActorChannel* Channel);

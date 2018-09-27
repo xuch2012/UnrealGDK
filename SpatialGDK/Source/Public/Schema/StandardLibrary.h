@@ -256,7 +256,7 @@ struct WorkingSet : Component
 		Schema_Object* ComponentObject = Schema_GetComponentDataFields(Data.schema_type);
 
 		uint32 SpatialChildEntityCount = Schema_GetEntityIdCount(ComponentObject, 1);
-		if(SpatialChildEntityCount > 0)
+		if (SpatialChildEntityCount > 0)
 		{
 			Schema_EntityId* SpatialChildEntityReferences = new Schema_EntityId[SpatialChildEntityCount];
 			Schema_GetEntityIdList(ComponentObject, 1, SpatialChildEntityReferences);
@@ -275,3 +275,4 @@ struct WorkingSet : Component
 	Worker_EntityId ParentReference;
 	TArray<Worker_EntityId> ChildReferences;
 };
+}
