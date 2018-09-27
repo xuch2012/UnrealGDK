@@ -1,11 +1,9 @@
-# License
-
-## Unreal
+# Unreal
 Your access to and use of the Unreal Engine is governed by the [Unreal Engine End User License Agreement](https://www.unrealengine.com/en-US/previous-versions/udk-licensing-resources). Please ensure that you have
 agreed to those terms before you access or use the Unreal Engine.
 
 
-## SpatialOS GDK for Unreal
+# SpatialOS GDK for Unreal
 Copyright 2018 Improbable Worlds Limited (“Improbable”)
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 documentation files (the "Software"), to deal in the Software without restriction, including without limitation
