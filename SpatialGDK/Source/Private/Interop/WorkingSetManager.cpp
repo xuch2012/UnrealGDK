@@ -39,6 +39,41 @@ void UWorkingSetManager::SendPositionUpdate(const USpatialActorChannel* ActorCha
 	}
 }
 
+bool UWorkingSetManager::IsQueuedEntity(const Worker_EntityId & EntityId)
+{
+	for (const auto& Entry : PendingSpawningSets)
+	{
+		TArray<FWorkingSetSpawnData> Children = Entry.Value;
+		for (const FWorkingSetSpawnData& Child : Children)
+		{
+			if (Child.EntityId == EntityId)
+			{
+				return true;
+			}
+		}
+	}
+
+	
+	FWorkingSetSpawnData* FirstRequeuedData = nullptr;
+	FWorkingSetSpawnData CurrentData;
+
+	while (ActorSpawnQueue.Dequeue(CurrentData) && !(FirstRequeuedData && (CurrentData == *FirstRequeuedData)))
+	{
+		ActorSpawnQueue.Enqueue(CurrentData);
+		if (!FirstRequeuedData)
+		{
+			FirstRequeuedData = &CurrentData;
+		}
+
+		if (CurrentData.EntityId == EntityId)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
 bool UWorkingSetManager::IsRelevantRequest(const Worker_RequestId & RequestId)
 {
 	return PendingWorkingSetCreationRequests.Contains(RequestId);
@@ -236,3 +271,4 @@ void UWorkingSetManager::SpawnAndCleanActors(const FWorkingSetSpawnData & Parent
 	CurrentPendingWorkingSetCreations.Empty();
 	PendingSpawningSets.Remove(ParentSpawnData);
 }
+

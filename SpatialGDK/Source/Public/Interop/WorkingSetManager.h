@@ -73,6 +73,8 @@ public:
 
 	// updates
 	void SendPositionUpdate(const USpatialActorChannel* ActorChannel, const FVector& Loction);
+	bool IsQueuedEntity(const Worker_EntityId& EntityId);
+
 
 	bool IsRelevantRequest(const Worker_RequestId& RequestId);
 	void ProcessWorkingSet(const Worker_EntityId& FirstId, const uint32& NumOfEntities, const Worker_RequestId& RequestId);

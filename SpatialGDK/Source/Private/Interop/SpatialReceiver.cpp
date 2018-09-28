@@ -114,13 +114,13 @@ void USpatialReceiver::OnAddComponent(Worker_AddComponentOp& Op)
 {
 	UE_LOG(LogSpatialReceiver, Verbose, TEXT("AddComponent component ID: %u entity ID: %lld"),
 		Op.data.component_id, Op.entity_id);
-
-	if (!bInCriticalSection)
-	{
-		UE_LOG(LogSpatialReceiver, Warning, TEXT("Received a dynamically added component, these are currently unsupported - component ID: %u entity ID: %lld"),
-			Op.data.component_id, Op.entity_id);
-		return;
-	}
+// 
+// 	if (!bInCriticalSection)
+// 	{
+// 		UE_LOG(LogSpatialReceiver, Warning, TEXT("Received a dynamically added component, these are currently unsupported - component ID: %u entity ID: %lld"),
+// 			Op.data.component_id, Op.entity_id);
+// 		return;
+// 	}
 
 	TSharedPtr<improbable::Component> Data;
 
@@ -543,7 +543,15 @@ void USpatialReceiver::OnComponentUpdate(Worker_ComponentUpdateOp& Op)
 	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(Class);
 	check(Info);
 
+	if (WorkingSetManager->IsQueuedEntity(Op.entity_id))
+	{
+		PendingWorkingSetComponentUpdates.Add(Op);
+		return;
+	}
+	
+
 	USpatialActorChannel* ActorChannel = NetDriver->GetActorChannelByEntityId(Op.entity_id);
+ 
 	if (ActorChannel == nullptr)
 	{
 		UE_LOG(LogSpatialReceiver, Warning, TEXT("Entity: %d Component: %d - No actor channel for update"), Op.entity_id, Op.update.component_id);
@@ -555,10 +563,6 @@ void USpatialReceiver::OnComponentUpdate(Worker_ComponentUpdateOp& Op)
 		if (UObject* TargetObject = GetTargetObjectFromChannelAndClass(ActorChannel, Class))
 		{
 			ApplyComponentUpdate(Op.update, TargetObject, ActorChannel, /* bIsHandover */ false);
-		}
-		else
-		{
-			PendingWorkingSetComponentUpdates.Add(Op);
 		}
 	}
 	else if (Op.update.component_id == Info->HandoverComponent)
