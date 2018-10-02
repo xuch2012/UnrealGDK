@@ -88,13 +88,11 @@ public:
 
 	USpatialActorChannel* GetActorChannelByEntityId(Worker_EntityId EntityId) const;
 
-	DECLARE_DELEGATE(WorldWipeDelegate);
-	WorldWipeDelegate Delegate;
+	DECLARE_DELEGATE(ServerTravelDelegate);
 
-	UFUNCTION(BlueprintCallable, Server, WithValidation, Reliable)
-	void WipeWorld();
+	void WipeWorld(const USpatialNetDriver::ServerTravelDelegate& LoadSnapshotAfterWorldWipe);
 
-	void LoadSnapshot();
+	void LoadSnapshot(const USpatialNetDriver::ServerTravelDelegate& FinishServerTravel);
 
 	UPROPERTY()
 	USpatialWorkerConnection* Connection;
@@ -118,6 +116,7 @@ public:
 	TMap<UClass*, TPair<AActor*, USpatialActorChannel*>> SingletonActorChannels;
 
 	bool bConnectAsClient;
+	FString SnapshotToLoad;
 
 	bool IsAuthoritativeDestructionAllowed() const { return bAuthoritativeDestruction; }
 	void StartIgnoringAuthoritativeDestruction() { bAuthoritativeDestruction = false; }
