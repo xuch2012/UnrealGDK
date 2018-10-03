@@ -191,7 +191,7 @@ void USpatialNetDriver::OnConnected()
 	if (ServerConnection)
 	{
 		// Send the player spawn commands with retries
-		PlayerSpawner->SendPlayerSpawnRequest();
+		//PlayerSpawner->SendPlayerSpawnRequest();
 	}
 	else
 	{
@@ -216,12 +216,18 @@ void USpatialNetDriver::OnConnected()
 	Receiver->Init(this, TimerManager);
 	GlobalStateManager->Init(this);
 
+	// Josh - duplicated this and moved it below since the Receiver needs to be initialized to spawn now.
+	if (ServerConnection)
+	{
+		// Send the player spawn commands with retries
+		PlayerSpawner->SendPlayerSpawnRequest();
+	}
+
 	// Josh - Here if we are a server and this is server travel we want to load the snapshot.
 	if(!SnapshotToLoad.IsEmpty())
 	{
 		UE_LOG(LogSpatialOSNetDriver, Warning, TEXT("Loading snapshot: %s"), *SnapshotToLoad);
-		ServerTravelDelegate Delegate;
-		LoadSnapshot(Delegate);
+		LoadSnapshot();
 	}
 }
 
@@ -1205,7 +1211,7 @@ void USpatialNetDriver::WipeWorld(const USpatialNetDriver::ServerTravelDelegate&
 	GlobalStateManager->WorldWipe(LoadSnapshotAfterWorldWipe);
 }
 
-void USpatialNetDriver::LoadSnapshot(const USpatialNetDriver::ServerTravelDelegate& FinishServerTravel)
+void USpatialNetDriver::LoadSnapshot()
 {
-	GlobalStateManager->LoadSnapshot(FinishServerTravel);
+	GlobalStateManager->LoadSnapshot();
 }
