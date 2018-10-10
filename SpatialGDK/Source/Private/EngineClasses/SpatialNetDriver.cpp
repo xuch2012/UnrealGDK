@@ -22,6 +22,7 @@
 #include "EngineClasses/SpatialNetConnection.h"
 #include "EngineClasses/SpatialPackageMapClient.h"
 #include "EngineClasses/SpatialPendingNetGame.h"
+#include "EngineClasses/SpatialGameInstance.h"
 #include "SpatialConstants.h"
 #include "Utils/EntityRegistry.h"
 
@@ -218,12 +219,6 @@ void USpatialNetDriver::Connect()
 		OnConnectFailed(Reason);
 	});
 
-	//if(ServerConnection) // Make clients wait to allow the server to finish loading and connecting to spatial.
-	//{
-	//	UE_LOG(LogSpatialOSNetDriver, Error, TEXT("Doing some disgusting wait as a client."));
-	//	FPlatformProcess::Sleep(10);
-	//}
-
 	Connection->Connect(bConnectAsClient);
 }
 
@@ -275,6 +270,11 @@ void USpatialNetDriver::OnConnected()
 	// If we're the client, we can now ask the server to spawn our controller.
 	if (ServerConnection)
 	{
+		if (GlobalStateManager->bAcceptingPlayers)
+		{
+			PlayerSpawner->SendPlayerSpawnRequest();
+		}
+
 		// We should have a streaming query for the GSM. Simply wait for the accepting_players to be true.
 		auto PlayerSpawnerRef = TWeakObjectPtr<USpatialPlayerSpawner>(PlayerSpawner);
 		GlobalStateManager->AcceptingPlayersChanged.BindLambda([PlayerSpawnerRef](bool bAcceptingPlayers) {
@@ -289,13 +289,13 @@ void USpatialNetDriver::OnConnected()
 		GlobalStateManager->QueryGSM();
 	}
 
-	// Josh - Here if we are a server and this is server travel we want to load the snapshot.
-	if(!ServerConnection && !SnapshotToLoad.IsEmpty())
+	// Here if we are a server and this is server travel (there is a snapshot to load) we want to load the snapshot.
+	if(!ServerConnection && !SnapshotToLoad.IsEmpty() && Cast<USpatialGameInstance>(GetWorld()->GetGameInstance())->bIsWorkerAuthorativeOverGSM)
 	{
-		UE_LOG(LogSpatialOSNetDriver, Warning, TEXT("Loading snapshot: %s"), *SnapshotToLoad);
-		// ToggleAcceptingPlayers is set to true once the snapshot has loaded.
-		LoadSnapshot(); // TODO: We also need to check if we are authoritative over the GSM.
-	} else if(!ServerConnection)
+		UE_LOG(LogSpatialOSNetDriver, Warning, TEXT("Worker authoriative over the GSM is loading snapshot: %s"), *SnapshotToLoad);
+		GlobalStateManager->LoadSnapshot(SnapshotToLoad);
+	}
+	else if (!ServerConnection)
 	{
 		GlobalStateManager->ToggleAcceptingPlayers(true);
 	}
@@ -1279,9 +1279,4 @@ void USpatialNetDriver::WipeWorld(const USpatialNetDriver::ServerTravelDelegate&
 {
 	UE_LOG(LogSpatialOSNetDriver, Error, TEXT("Wiping world!"));
 	GlobalStateManager->WorldWipe(LoadSnapshotAfterWorldWipe);
-}
-
-void USpatialNetDriver::LoadSnapshot()
-{
-	GlobalStateManager->LoadSnapshot();
 }
