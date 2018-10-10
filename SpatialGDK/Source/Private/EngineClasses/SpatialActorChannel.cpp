@@ -666,6 +666,11 @@ void USpatialActorChannel::UpdateSpatialRotation()
 
 FVector USpatialActorChannel::GetActorSpatialPosition(AActor* InActor)
 {
+	if (InActor->IsA<AGameModeBase>() || InActor->IsA<AGameStateBase>())
+	{
+		return FVector(-500.0f, 0.0f, 0.0f);
+	}
+
 	// If the Actor has an Owner, use its position.
 	// Otherwise if the Actor has a well defined location then use that
 	// Otherwise use the origin

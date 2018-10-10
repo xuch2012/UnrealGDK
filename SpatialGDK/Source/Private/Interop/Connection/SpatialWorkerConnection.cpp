@@ -257,6 +257,8 @@ void USpatialWorkerConnection::SendCommandResponse(Worker_RequestId RequestId, c
 
 void USpatialWorkerConnection::SendLogMessage(const uint8_t Level, const char* LoggerName, const char* Message)
 {
+	if (!WorkerConnection) return;
+
 	Worker_LogMessage LogMessage{};
 	LogMessage.level = Level;
 	LogMessage.logger_name = LoggerName;

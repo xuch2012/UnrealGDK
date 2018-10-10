@@ -55,7 +55,9 @@ bool CreateSpawnerEntity(Worker_SnapshotOutputStream* OutputStream)
 	ComponentWriteAcl.Add(SpatialConstants::ENTITY_ACL_COMPONENT_ID, UnrealServerPermission);
 	ComponentWriteAcl.Add(SpatialConstants::PLAYER_SPAWNER_COMPONENT_ID, UnrealServerPermission);
 
-	Components.Add(improbable::Position(Origin).CreatePositionData());
+	improbable::Coordinates SpawnerCoords = Origin;
+	SpawnerCoords.Z -= 5.0f;
+	Components.Add(improbable::Position(SpawnerCoords).CreatePositionData());
 	Components.Add(improbable::Metadata(TEXT("SpatialSpawner")).CreateMetadataData());
 	Components.Add(improbable::Persistence().CreatePersistenceData());
 	Components.Add(improbable::UnrealMetadata().CreateUnrealMetadataData());
@@ -118,7 +120,9 @@ bool CreateGlobalStateManager(Worker_SnapshotOutputStream* OutputStream)
 	ComponentWriteAcl.Add(SpatialConstants::ENTITY_ACL_COMPONENT_ID, UnrealServerPermission);
 	ComponentWriteAcl.Add(SpatialConstants::GLOBAL_STATE_MANAGER_COMPONENT_ID, UnrealServerPermission);
 
-	Components.Add(improbable::Position(Origin).CreatePositionData());
+	improbable::Coordinates GSMCoords = Origin;
+	GSMCoords.Z -= 5.0f;
+	Components.Add(improbable::Position(GSMCoords).CreatePositionData());
 	Components.Add(improbable::Metadata(TEXT("GlobalStateManager")).CreateMetadataData());
 	Components.Add(improbable::Persistence().CreatePersistenceData());
 	Components.Add(improbable::UnrealMetadata().CreateUnrealMetadataData());
