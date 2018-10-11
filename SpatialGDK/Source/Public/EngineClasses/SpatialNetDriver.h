@@ -26,6 +26,7 @@ class USpatialReceiver;
 class USpatialTypebindingManager;
 class UGlobalStateManager;
 class USpatialPlayerSpawner;
+class USnapshotManager;
 
 class UEntityRegistry;
 
@@ -110,6 +111,8 @@ public:
 	USpatialPackageMapClient* PackageMap;
 	UPROPERTY()
 	UEntityRegistry* EntityRegistry;
+	UPROPERTY()
+	USnapshotManager* SnapshotManager;
 
 	TMap<UClass*, TPair<AActor*, USpatialActorChannel*>> SingletonActorChannels;
 
