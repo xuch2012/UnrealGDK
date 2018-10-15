@@ -47,6 +47,10 @@ bool USpatialNetDriver::InitBase(bool bInitAsClient, FNetworkNotify* InNotify, c
 	TypebindingManager = NewObject<USpatialTypebindingManager>();
 	TypebindingManager->Init();
 
+	// Extract the snapshot to load (if any) from the map URL. If one exists, it indicates that a server travel was initiated.
+	// The server will use the snapshot in the URL to load all entities in said snapshot into the deployment.
+	SnapshotToLoad = URL.GetOption(TEXT("snapshot="), TEXT(""));
+
 	// We do this here straight away to trigger LoadMap.
 	if (bInitAsClient)
 	{
@@ -59,15 +63,6 @@ bool USpatialNetDriver::InitBase(bool bInitAsClient, FNetworkNotify* InNotify, c
 			WorldContext->PendingNetGame->bSuccessfullyConnected = true;
 			WorldContext->PendingNetGame->bSentJoinRequest = false;
 		}
-	}
-	else
-	{
-		// ServerWorkers will already have a SpatialConnection which is created and owned by the SpatialGameInstance.
-		// This is so they can maintain a persistent connection to a deployment during Server Travel.
-		Connection = Cast<USpatialGameInstance>(GetWorld()->GetGameInstance())->SpatialConnection;
-
-		// Extract the snapshot to load (if any) from the map URL so that once we are connected to a deployment we can load that snapshot into the Spatial deployment.
-		SnapshotToLoad = URL.GetOption(TEXT("snapshot="), TEXT(""));
 	}
 
 	return true;
@@ -82,69 +77,6 @@ void USpatialNetDriver::PostInitProperties()
 		// GuidCache will be allocated as an FNetGUIDCache above. To avoid an engine code change, we re-do it with the Spatial equivalent.
 		GuidCache = MakeShareable(new FSpatialNetGUIDCache(this));
 	}
-}
-
-// TODO: Move this to it's own class.
-void SpatialProcessServerTravel(const FString& URL, bool bAbsolute, AGameModeBase* GameMode)
-{
-#if WITH_SERVER_CODE
-
-	GameMode->StartToLeaveMap();
-
-	// Force an old style load screen if the server has been up for a long time so that TimeSeconds doesn't overflow and break everything
-	bool bSeamless = (GameMode->bUseSeamlessTravel && GameMode->GetWorld()->TimeSeconds < 172800.0f); // 172800 seconds == 48 hours
-
-	FString NextMap;
-	if (URL.ToUpper().Contains(TEXT("?RESTART")))
-	{
-		NextMap = UWorld::RemovePIEPrefix(GameMode->GetOutermost()->GetName());
-	}
-	else
-	{
-		int32 OptionStart = URL.Find(TEXT("?"));
-		if (OptionStart == INDEX_NONE)
-		{
-			NextMap = URL;
-		}
-		else
-		{
-			NextMap = URL.Left(OptionStart);
-		}
-	}
-
-	FGuid NextMapGuid = UEngine::GetPackageGuid(FName(*NextMap), GameMode->GetWorld()->IsPlayInEditor());
-
-	// Notify clients we're switching level and give them time to receive.
-	FString URLMod = URL;
-	APlayerController* LocalPlayer = GameMode->ProcessClientTravel(URLMod, NextMapGuid, bSeamless, bAbsolute);
-
-	UE_LOG(LogGameMode, Warning, TEXT("SpatialServerTravel - Wiping the world"), *URL);
-	UWorld* World = GameMode->GetWorld();
-	USpatialNetDriver* NetDriver = Cast<USpatialNetDriver>(World->GetNetDriver());
-	ENetMode NetMode = GameMode->GetNetMode();
-
-	// FinishServerTravel - Allows Unreal to finish it's normal server travel.
-	USpatialNetDriver::ServerTravelDelegate FinishServerTravel;
-	FinishServerTravel.BindLambda([World, NetDriver, URL, NetMode, bSeamless, bAbsolute] {
-
-		UE_LOG(LogGameMode, Log, TEXT("SpatialServerTravel - Finishing Server Travel : %s"), *URL);
-		check(World);
-		World->NextURL = URL;
-
-		if (bSeamless)
-		{
-			World->SeamlessTravel(World->NextURL, bAbsolute);
-			World->NextURL = TEXT("");
-		}
-		// Switch immediately if not networking.
-		else if (NetMode != NM_DedicatedServer && NetMode != NM_ListenServer)
-		{
-			World->NextSwitchCountdown = 0.0f;
-		}
-	});
-
-	NetDriver->WipeWorld(FinishServerTravel);
-#endif // WITH_SERVER_CODE
 }
 
 void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
@@ -169,10 +101,26 @@ void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
 	// Set up manager objects.
 	EntityRegistry = NewObject<UEntityRegistry>(this);
 
-	if (bConnectAsClient)
+	// Having a snapshot to load in the URL indicates that a server travel has been initiated. In this case we do not want to create a new spatial connection.
+	// If there is no snapshot in the URL then this indicates we are a first time startup or a client travel has initiated and therefore we want a new spatial connection.
+	USpatialWorkerConnection* GameInstanceSpatialConnection = Cast<USpatialGameInstance>(GetWorld()->GetGameInstance())->SpatialConnection;
+	if (!GameInstanceSpatialConnection || SnapshotToLoad.IsEmpty())
 	{
-		// Clients always create a new connection to Spatial when loading a new map.
-		Connection = NewObject<USpatialWorkerConnection>();
+		// Create the SpatialWorkerConnection. Stored in the game instance for persistence when traveling between maps.
+		GameInstanceSpatialConnection = NewObject<USpatialWorkerConnection>();
+
+		// Store a pointer to that spatial connection in this class.
+		Connection = GameInstanceSpatialConnection;
+	}
+
+	// If we have hit OnMapLoaded and we already have a connection then we know we are in ServerTravel.
+	// For a server this means cleaning up the old SpatialConnection ready for a fresh instance.
+	// It also involves loading the snapshot specified in the URL and toggling AcceptingPlayers on the GSM when ready.
+	if (Connection && Connection->IsConnected() && !ServerConnection && !SnapshotToLoad.IsEmpty())
+	{
+		UE_LOG(LogSpatialOSNetDriver, Warning, TEXT("Loaded Map %s. Server in ServerTravel. Cleaning up old connection..."), *LoadedWorld->GetName());
+		OnConnected();
+		return;
 	}
 
 	if (LoadedWorld->URL.HasOption(TEXT("locator")))
@@ -199,16 +147,6 @@ void USpatialNetDriver::OnMapLoaded(UWorld* LoadedWorld)
 		{
 			Connection->ReceptionistConfig.UseExternalIp = true;
 		}
-	}
-
-	// If we have hit OnMapLoaded and we already have a connection then we know we are in ServerTravel.
-	// For a server this means cleaning up the old SpatialConnection ready for a fresh instance.
-	// It also involves loading a fresh snapshot and toggling Accepting players on the GSM when ready.
-	if (Connection && Connection->IsConnected() && !ServerConnection && !SnapshotToLoad.IsEmpty())
-	{
-		UE_LOG(LogSpatialOSNetDriver, Error, TEXT("Loaded Map %s. Server in ServerTravel. Cleaning up old connection..."), *LoadedWorld->GetName());
-		OnConnected();
-		return;
 	}
 
 	Connect();
@@ -319,6 +257,68 @@ void USpatialNetDriver::OnConnected()
 void USpatialNetDriver::OnConnectFailed(const FString& Reason)
 {
 	UE_LOG(LogSpatialOSNetDriver, Error, TEXT("Could not connect to SpatialOS. Reason: %s"), *Reason);
+}
+
+void USpatialNetDriver::SpatialProcessServerTravel(const FString& URL, bool bAbsolute, AGameModeBase* GameMode)
+{
+#if WITH_SERVER_CODE
+
+	GameMode->StartToLeaveMap();
+
+	// Force an old style load screen if the server has been up for a long time so that TimeSeconds doesn't overflow and break everything
+	bool bSeamless = (GameMode->bUseSeamlessTravel && GameMode->GetWorld()->TimeSeconds < 172800.0f); // 172800 seconds == 48 hours
+
+	FString NextMap;
+	if (URL.ToUpper().Contains(TEXT("?RESTART")))
+	{
+		NextMap = UWorld::RemovePIEPrefix(GameMode->GetOutermost()->GetName());
+	}
+	else
+	{
+		int32 OptionStart = URL.Find(TEXT("?"));
+		if (OptionStart == INDEX_NONE)
+		{
+			NextMap = URL;
+		}
+		else
+		{
+			NextMap = URL.Left(OptionStart);
+		}
+	}
+
+	FGuid NextMapGuid = UEngine::GetPackageGuid(FName(*NextMap), GameMode->GetWorld()->IsPlayInEditor());
+
+	// Notify clients we're switching level and give them time to receive.
+	FString URLMod = URL;
+	APlayerController* LocalPlayer = GameMode->ProcessClientTravel(URLMod, NextMapGuid, bSeamless, bAbsolute);
+
+	UE_LOG(LogGameMode, Warning, TEXT("SpatialServerTravel - Wiping the world"), *URL);
+	UWorld* World = GameMode->GetWorld();
+	USpatialNetDriver* NetDriver = Cast<USpatialNetDriver>(World->GetNetDriver());
+	ENetMode NetMode = GameMode->GetNetMode();
+
+	// FinishServerTravel - Allows Unreal to finish it's normal server travel.
+	USpatialNetDriver::ServerTravelDelegate FinishServerTravel;
+	FinishServerTravel.BindLambda([World, NetDriver, URL, NetMode, bSeamless, bAbsolute] {
+
+		UE_LOG(LogGameMode, Log, TEXT("SpatialServerTravel - Finishing Server Travel : %s"), *URL);
+		check(World);
+		World->NextURL = URL;
+
+		if (bSeamless)
+		{
+			World->SeamlessTravel(World->NextURL, bAbsolute);
+			World->NextURL = TEXT("");
+		}
+		// Switch immediately if not networking.
+		else if (NetMode != NM_DedicatedServer && NetMode != NM_ListenServer)
+		{
+			World->NextSwitchCountdown = 0.0f;
+		}
+	});
+
+	NetDriver->WipeWorld(FinishServerTravel);
+#endif // WITH_SERVER_CODE
 }
 
 bool USpatialNetDriver::IsLevelInitializedForActor(const AActor* InActor, const UNetConnection* InConnection) const

@@ -134,17 +134,9 @@ FGameInstancePIEResult USpatialGameInstance::StartPlayInEditorGameInstance(ULoca
 
 void USpatialGameInstance::StartGameInstance()
 {
-	if (!GIsClient)
+	if (!GIsClient || !HasSpatialNetDriver())
 	{
-		if (!HasSpatialNetDriver()) {
-			Super::StartGameInstance();
-		}
-		else
-		{
-			// Spatial server workers require a persistent spatial connection and so it is initialized and stored here in the GameInstance.
-			SpatialConnection = NewObject<USpatialWorkerConnection>();
-			Super::StartGameInstance();
-		}
+		Super::StartGameInstance();
 	}
 	else
 	{
