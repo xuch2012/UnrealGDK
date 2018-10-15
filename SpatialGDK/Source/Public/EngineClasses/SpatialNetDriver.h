@@ -136,8 +136,6 @@ private:
 	UFUNCTION()
 	void OnMapLoaded(UWorld* LoadedWorld);
 
-	void InitConnectionStuff();
-
 	void Connect();
 
 	UFUNCTION()
