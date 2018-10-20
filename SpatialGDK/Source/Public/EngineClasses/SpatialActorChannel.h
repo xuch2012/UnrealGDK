@@ -89,6 +89,7 @@ public:
 
 	FRepChangeState CreateInitialRepChangeState(UObject* Object);
 	FHandoverChangeState CreateInitialHandoverChangeState(FClassInfo* ClassInfo);
+	FInitialSnapshotChangeState CreateInitialSnapshotChangeState(FClassInfo* ClassInfo);
 
 	// For an object that is replicated by this channel (i.e. this channel's actor or its component), find out whether a given handle is an array.
 	bool IsDynamicArrayHandle(UObject* Object, uint16 Handle);

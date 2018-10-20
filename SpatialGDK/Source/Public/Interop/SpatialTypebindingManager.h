@@ -50,6 +50,8 @@ struct FHandoverPropertyInfo
 	UProperty* Property;
 };
 
+using FInitialSnapshotPropertyInfo = struct FHandoverPropertyInfo;
+
 USTRUCT()
 struct FClassInfo
 {
@@ -59,10 +61,12 @@ struct FClassInfo
 	TMap<UFunction*, FRPCInfo> RPCInfoMap;
 
 	TArray<FHandoverPropertyInfo> HandoverProperties;
+	TArray<FInitialSnapshotPropertyInfo> InitialSnapshotProperties;
 
 	Worker_ComponentId SingleClientComponent;
 	Worker_ComponentId MultiClientComponent;
 	Worker_ComponentId HandoverComponent;
+	Worker_ComponentId InitialSnapshotComponent;
 	Worker_ComponentId RPCComponents[RPC_Count];
 
 	TSet<UClass*> SubobjectClasses;

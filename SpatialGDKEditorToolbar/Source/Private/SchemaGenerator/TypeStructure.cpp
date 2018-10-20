@@ -534,6 +534,29 @@ FCmdHandlePropertyMap GetFlatHandoverData(TSharedPtr<FUnrealType> TypeInfo)
 	return HandoverData;
 }
 
+FCmdHandlePropertyMap GetFlatInitialSnapshotData(TSharedPtr<FUnrealType> TypeInfo)
+{
+	FCmdHandlePropertyMap InitialSnapshotData;
+	uint16 Handle = 1;
+	VisitAllProperties(TypeInfo, [&InitialSnapshotData, &Handle](TSharedPtr<FUnrealProperty> PropertyInfo)
+	{
+		if (!PropertyInfo->HandoverData.IsValid() &&
+			!PropertyInfo->ReplicationData.IsValid() &&
+			((PropertyInfo->Property->PropertyFlags & EPropertyFlags::CPF_Transient) == 0))
+		{
+			InitialSnapshotData.Add(Handle++, PropertyInfo);
+		}
+		return true;
+	}, false);
+
+	// Sort by property handle.
+	InitialSnapshotData.KeySort([](uint16 A, uint16 B)
+	{
+		return A < B;
+	});
+	return InitialSnapshotData;
+}
+
 // Goes through all RPCs in the TypeInfo and returns a list of all the unique RPC source classes.
 TArray<FString> GetRPCTypeOwners(TSharedPtr<FUnrealType> TypeInfo)
 {

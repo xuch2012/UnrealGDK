@@ -109,6 +109,11 @@ FString PropertyToSchemaType(UProperty* Property, bool bIsRPCProperty)
 	return DataType;
 }
 
+FString OptionalType(FString InnerType)
+{
+	return FString::Printf(TEXT("option<%s>"), *InnerType);
+}
+
 void WriteSchemaRepField(FCodeWriter& Writer, const TSharedPtr<FUnrealProperty> RepProp, const FString& PropertyPath, const int FieldCounter)
 {
 	Writer.Printf("{0} {1} = {2}; // {3} // {4}",
@@ -129,6 +134,16 @@ void WriteSchemaHandoverField(FCodeWriter& Writer, const TSharedPtr<FUnrealPrope
 	);
 }
 
+void WriteSchemaInitialSnapshotField(FCodeWriter& Writer, const TSharedPtr<FUnrealProperty> Prop, const int FieldCounter)
+{
+	Writer.Printf("{0} {1} = {2};",
+		//*OptionalType(PropertyToSchemaType(Prop->Property, false)),
+		*PropertyToSchemaType(Prop->Property, false),
+		*SchemaFieldName(Prop),
+		FieldCounter
+	);
+}
+
 void WriteSchemaRPCField(TSharedPtr<FCodeWriter> Writer, const TSharedPtr<FUnrealProperty> RPCProp, const int FieldCounter)
 {
 	Writer->Printf("{0} {1} = {2};",
@@ -136,6 +151,23 @@ void WriteSchemaRPCField(TSharedPtr<FCodeWriter> Writer, const TSharedPtr<FUnrea
 		*SchemaFieldName(RPCProp),
 		FieldCounter
 	);
+}
+
+bool PropertyRequiresCoreTypes(const UProperty* Property)
+{
+	if(Property->IsA<UObjectPropertyBase>())
+	{
+		return true;
+	}
+
+	if (Property->IsA<UArrayProperty>())
+	{
+		if (Cast<UArrayProperty>(Property)->Inner->IsA<UObjectPropertyBase>())
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 // core_types.schema should only be included if any components in the file have
@@ -150,19 +182,28 @@ bool ShouldIncludeCoreTypes(TSharedPtr<FUnrealType>& TypeInfo)
 	{
 		for (auto& PropertyPair : PropertyGroup.Value)
 		{
-			UProperty* Property = PropertyPair.Value->Property;
-			if(Property->IsA<UObjectPropertyBase>())
+			if (PropertyRequiresCoreTypes(PropertyPair.Value->Property))
 			{
 				return true;
 			}
+		}
+	}
 
-			if (Property->IsA<UArrayProperty>())
-			{
-				if (Cast<UArrayProperty>(Property)->Inner->IsA<UObjectPropertyBase>())
-				{
-					return true;
-				}
-			}
+	FCmdHandlePropertyMap HandoverData = GetFlatHandoverData(TypeInfo);
+	for (auto& PropertyPair : HandoverData)
+	{
+		if (PropertyRequiresCoreTypes(PropertyPair.Value->Property))
+		{
+			return true;
+		}
+	}
+
+	FCmdHandlePropertyMap SnapshotData = GetFlatInitialSnapshotData(TypeInfo);
+	for (auto& PropertyPair : SnapshotData)
+	{
+		if (PropertyRequiresCoreTypes(PropertyPair.Value->Property))
+		{
+			return true;
 		}
 	}
 
@@ -243,18 +284,34 @@ int GenerateTypeBindingSchema(FCodeWriter& Writer, int ComponentId, UClass* Clas
 	}
 
 	// Handover (server to server) replicated properties.
-	Writer.Printf("component {0} {", *SchemaHandoverDataName(Class));
-	Writer.Indent();
-	Writer.Printf("id = {0};", IdGenerator.GetNextAvailableId());
-	int FieldCounter = 0;
-	for (auto& Prop : GetFlatHandoverData(TypeInfo))
 	{
-		FieldCounter++;
-		WriteSchemaHandoverField(Writer,
-			Prop.Value,
-			FieldCounter);
+		Writer.Printf("component {0} {", *SchemaHandoverDataName(Class));
+		Writer.Indent();
+		Writer.Printf("id = {0};", IdGenerator.GetNextAvailableId());
+		int FieldCounter = 0;
+		for (auto& Prop : GetFlatHandoverData(TypeInfo))
+		{
+			FieldCounter++;
+			WriteSchemaHandoverField(Writer,
+				Prop.Value,
+				FieldCounter);
+		}
+		Writer.Outdent().Print("}");
 	}
-	Writer.Outdent().Print("}");
+
+	// Initial snapshot properties (non-replicated, non-handover).
+	{
+		Writer.Printf("component {0} {", *SchemaInitialSnapshotDataName(Class));
+		Writer.Indent();
+		Writer.Printf("id = {0};", IdGenerator.GetNextAvailableId());
+		int FieldCounter = 0;
+		for (auto& Prop : GetFlatInitialSnapshotData(TypeInfo))
+		{
+			FieldCounter++;
+			WriteSchemaInitialSnapshotField(Writer, Prop.Value, FieldCounter);
+		}
+		Writer.Outdent().Print("}");
+	}
 
 	// RPC components.
 	FUnrealRPCsByType RPCsByType = GetAllRPCsByType(TypeInfo);

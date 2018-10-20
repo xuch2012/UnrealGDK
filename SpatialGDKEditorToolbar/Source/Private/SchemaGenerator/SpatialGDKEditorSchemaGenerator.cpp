@@ -116,6 +116,7 @@ void CreateSchemaDatabase(TArray<UClass*> Classes)
 			SchemaData.SingleClientRepData = ComponentId++;
 			SchemaData.MultiClientRepData = ComponentId++;
 			SchemaData.HandoverData = ComponentId++;
+			SchemaData.InitialComponentData = ComponentId++;
 			SchemaData.ClientRPCs = ComponentId++;
 			SchemaData.ServerRPCs = ComponentId++;
 			SchemaData.CrossServerRPCs = ComponentId++;

@@ -108,6 +108,42 @@ bool ComponentFactory::FillHandoverSchemaObject(Schema_Object* ComponentObject, 
 	return bWroteSomething;
 }
 
+bool ComponentFactory::FillInitialSnapshotSchemaObject(Schema_Object* ComponentObject, UObject* Object, const FInitialSnapshotChangeState& Changes, bool bIsInitialData, TArray<Schema_FieldId>* ClearedIds /*= nullptr*/)
+{
+	bool bWroteSomething = false;
+
+	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(Object->GetClass());
+	check(Info);
+
+	for (uint16 ChangedHandle : Changes)
+	{
+		check(ChangedHandle > 0 && ChangedHandle - 1 < Info->InitialSnapshotProperties.Num());
+		const FInitialSnapshotPropertyInfo& PropertyInfo = Info->InitialSnapshotProperties[ChangedHandle - 1];
+
+		const uint8* Data = (uint8*)Object + PropertyInfo.Offset;
+		TSet<const UObject*> UnresolvedObjects;
+
+		AddProperty(ComponentObject, ChangedHandle, PropertyInfo.Property, Data, UnresolvedObjects, ClearedIds);
+
+		if (UnresolvedObjects.Num() == 0)
+		{
+			bWroteSomething = true;
+		} else
+		{
+			if (!bIsInitialData)
+			{
+				// Don't send updates for fields with unresolved objects, unless it's the initial data,
+				// in which case all fields should be populated.
+				Schema_ClearField(ComponentObject, ChangedHandle);
+			}
+
+			//PendingHandoverUnresolvedObjectsMap.Add(ChangedHandle, UnresolvedObjects);
+		}
+	}
+
+	return bWroteSomething;
+}
+
 void ComponentFactory::AddProperty(Schema_Object* Object, Schema_FieldId FieldId, UProperty* Property, const uint8* Data, TSet<const UObject*>& UnresolvedObjects, TArray<Schema_FieldId>* ClearedIds)
 {
 	if (UStructProperty* StructProperty = Cast<UStructProperty>(Property))
@@ -259,7 +295,8 @@ void ComponentFactory::AddProperty(Schema_Object* Object, Schema_FieldId FieldId
 	}
 	else
 	{
-		checkf(false, TEXT("Tried to add unknown property in field %d"), FieldId);
+		//checkf(false, TEXT("Tried to add unknown property in field %d"), FieldId);
+		UE_LOG(LogTemp, Error, TEXT("Tried to add property of unknown type: %d %s %s"), FieldId, *Property->GetName(), *Property->GetCPPType());
 	}
 }
 
@@ -392,6 +429,19 @@ Worker_ComponentUpdate ComponentFactory::CreateHandoverComponentUpdate(Worker_Co
 	}
 
 	return ComponentUpdate;
+}
+
+Worker_ComponentData ComponentFactory::CreateInitialSnapshotComponentData(UObject* Object, const FInitialSnapshotChangeState& Changes)
+{
+	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(Object->GetClass());
+	check(Info);
+
+	Worker_ComponentData ComponentData = CreateEmptyComponentData(Info->InitialSnapshotComponent);
+	Schema_Object* ComponentObject = Schema_GetComponentDataFields(ComponentData.schema_type);
+
+	FillInitialSnapshotSchemaObject(ComponentObject, Object, Changes, true);
+
+	return ComponentData;
 }
 
 void ComponentFactory::AssignUnrealObjectRefToContext(UProperty* Property, const uint8* Data, FUnrealObjectRef ObjectRef)

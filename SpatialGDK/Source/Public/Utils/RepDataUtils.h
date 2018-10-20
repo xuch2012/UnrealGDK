@@ -14,3 +14,4 @@ struct FRepChangeState
 };
 
 using FHandoverChangeState = TArray<uint16>; // changed handover properties
+using FInitialSnapshotChangeState = TArray<uint16>; // changed snapshot properties
