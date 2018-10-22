@@ -727,7 +727,7 @@ void USpatialActorChannel::SpatialViewTick()
 					bFirstTick = false;
 				}
 			}
-			else if(!NetDriver->IsServer())
+			else if (!NetDriver->IsServer())
 			{
 				Sender->SendComponentInterest(Actor, GetEntityId());
 
