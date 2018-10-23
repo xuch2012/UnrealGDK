@@ -1,4 +1,5 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+#pragma optimize("", off)
 
 #include "ComponentReader.h"
 
@@ -545,3 +546,5 @@ uint32 ComponentReader::GetPropertyCount(const Schema_Object* Object, Schema_Fie
 }
 
 }
+
+#pragma optimize("", on)

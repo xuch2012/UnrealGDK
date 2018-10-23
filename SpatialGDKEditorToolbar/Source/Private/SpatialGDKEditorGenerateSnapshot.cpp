@@ -314,7 +314,11 @@ bool CreateStartupActor(Worker_SnapshotOutputStream* OutputStream, AActor* Actor
 
 	USpatialActorChannel* Channel = Cast<USpatialActorChannel>(NetConnection->CreateChannel(CHTYPE_Actor, 1));
 
-	FString StaticPath = Actor->GetPathName(nullptr);
+	FString StaticPath;
+	if (/*Actor->IsFullNameStableForNetworking() && */ Actor->bNetLoadOnClient)
+	{
+		StaticPath = Actor->GetPathName(nullptr);
+	}
 
 	TArray<Worker_ComponentData> Components;
 	Components.Add(improbable::Position(improbable::Coordinates::FromFVector(Channel->GetActorSpatialPosition(Actor))).CreatePositionData());

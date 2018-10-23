@@ -528,6 +528,13 @@ int32 USpatialNetDriver::ServerReplicateActors_ProcessPrioritizedActors(UNetConn
 				}
 			}
 
+			if (Channel == NULL && Actor->IsNameStableForNetworking() && Actor->bNetLoadOnClient)
+			{
+				// If this is a stably-named actor that we expect to have been loaded but doesn't yet have a channel, break
+				// because it should have a corresponding snapshot entity that hasn't come off the wire yet.
+				continue;
+			}
+
 			// if the actor is now relevant or was recently relevant
 			const bool bIsRecentlyRelevant = bIsRelevant || (Channel && Time - Channel->RelevantTime < RelevantTimeout);
 

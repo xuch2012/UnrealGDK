@@ -231,6 +231,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 	improbable::Position* Position = StaticComponentView->GetComponentData<improbable::Position>(EntityId);
 	improbable::Metadata* Metadata = StaticComponentView->GetComponentData<improbable::Metadata>(EntityId);
 	improbable::Rotation* Rotation = StaticComponentView->GetComponentData<improbable::Rotation>(EntityId);
+	improbable::UnrealMetadata* UnrealMetadata = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
 
 	check(Position && Metadata);
 
@@ -267,6 +268,29 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 			return;
 		}
 
+		if (!UnrealMetadata->StaticPath.IsEmpty())
+		{
+			// Try to find static actor in level
+			FString FullPath = UnrealMetadata->StaticPath;
+			if (GEngine)
+			{
+				if (!GEngine->NetworkRemapPath(NetDriver, FullPath))
+				{
+					UE_LOG(LogSpatialReceiver, Error, TEXT("NetworkRemapPath failed for %s"), *FullPath);
+				}
+			}
+			UE_LOG(LogSpatialReceiver, Log, TEXT("Searching for checked-out static actor with entity id %lld and path %s"), EntityId, *FullPath);
+			EntityActor = FindObject<AActor>(ANY_PACKAGE, *FullPath);
+
+			// If found, make sure it's got netLoadOnClient checked
+			if (EntityActor)
+			{
+				UE_LOG(LogSpatialReceiver, Log, TEXT("Resolved checked-out static actor with entity id %lld and path %s to %s"),
+					EntityId, *FullPath, *EntityActor->GetFullName());
+				checkf(EntityActor->bNetLoadOnClient, TEXT("Resolved static replicated actor with NetLoadOnClient == false: %lld %s"), EntityId, *FullPath);
+			}
+		}
+
 		UNetConnection* Connection = nullptr;
 		improbable::UnrealMetadata* UnrealMetadataComponent = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
 		check(UnrealMetadataComponent);
@@ -289,13 +313,15 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 		{
 			UE_LOG(LogSpatialReceiver, Verbose, TEXT("Spawning a %s whilst checking out an entity."), *ActorClass->GetFullName());
 
-			EntityActor = CreateActor(Position, Rotation, ActorClass, true);
+			if (!EntityActor)
+			{
+				EntityActor = CreateActor(Position, Rotation, ActorClass, true);
+				bDoingDeferredSpawn = true;
+			}
 
 			// Don't have authority over Actor until SpatialOS delegates authority
 			EntityActor->Role = ROLE_SimulatedProxy;
 			EntityActor->RemoteRole = ROLE_Authority;
-
-			bDoingDeferredSpawn = true;
 
 			// Get the net connection for this actor.
 			if (NetDriver->IsServer())
@@ -527,16 +553,16 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 
 		QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
 	}
-	else if (Data.component_id == Info->InitialSnapshotComponent)
-	{
-		FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
-		TSet<FUnrealObjectRef> UnresolvedRefs;
+	//else if (Data.component_id == Info->InitialSnapshotComponent)
+	//{
+	//	FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
+	//	TSet<FUnrealObjectRef> UnresolvedRefs;
 
-		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
-		Reader.ApplyInitialSnapshotData(Data, TargetObject, Channel);
+	//	ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
+	//	Reader.ApplyInitialSnapshotData(Data, TargetObject, Channel);
 
-		QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
-	}
+	//	QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
+	//}
 	else
 	{
 		UE_LOG(LogSpatialReceiver, Verbose, TEXT("Entity: %d Component: %d - Skipping because RPC components don't have actual data."), EntityId, Data.component_id);
