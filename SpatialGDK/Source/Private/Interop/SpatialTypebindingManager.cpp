@@ -97,7 +97,7 @@ void USpatialTypebindingManager::CreateTypebindings()
 				}
 			}
 			// TODO: make sure it's not also replicated?
-			else if (Property->PropertyFlags & CPF_InstancedReference)
+			else if (!(Property->PropertyFlags & CPF_Transient))
 			{
 				for (int32 ArrayIdx = 0; ArrayIdx < PropertyIt->ArrayDim; ++ArrayIdx)
 				{

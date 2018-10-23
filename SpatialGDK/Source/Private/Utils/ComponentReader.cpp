@@ -57,6 +57,48 @@ void ComponentReader::ApplyComponentUpdate(const Worker_ComponentUpdate& Compone
 	}
 }
 
+void ComponentReader::ApplyInitialSnapshotData(const Worker_ComponentData& ComponentData, UObject* Object, USpatialActorChannel* Channel)
+{
+	Schema_Object* ComponentObject = Schema_GetComponentDataFields(ComponentData.schema_type);
+
+	TArray<uint32> UpdateFields;
+	UpdateFields.SetNum(Schema_GetUniqueFieldIdCount(ComponentObject));
+	Schema_GetUniqueFieldIds(ComponentObject, UpdateFields.GetData());
+
+	if (UpdateFields.Num() == 0)
+	{
+		return;
+	}
+
+	FClassInfo* ClassInfo = TypebindingManager->FindClassInfoByClass(Object->GetClass());
+	check(ClassInfo);
+
+	Channel->PreReceiveSpatialUpdate(Object);
+
+	for (uint32 FieldId : UpdateFields)
+	{
+		// FieldId is the same as handover handle
+		check(FieldId > 0 && (int)FieldId - 1 < ClassInfo->InitialSnapshotProperties.Num());
+		const FInitialSnapshotPropertyInfo& PropertyInfo = ClassInfo->InitialSnapshotProperties[FieldId - 1];
+
+		uint8* Data = (uint8*)Object + PropertyInfo.Offset;
+
+		//if (bIsInitialData || GetPropertyCount(ComponentObject, FieldId, PropertyInfo.Property) > 0 || ClearedIds->Find(FieldId) != INDEX_NONE)
+		//{
+			if (UArrayProperty* ArrayProperty = Cast<UArrayProperty>(PropertyInfo.Property))
+			{
+				ApplyArray(ComponentObject, FieldId, RootObjectReferencesMap, ArrayProperty, Data, PropertyInfo.Offset, -1);
+			}
+			else
+			{
+				ApplyProperty(ComponentObject, FieldId, RootObjectReferencesMap, 0, PropertyInfo.Property, Data, PropertyInfo.Offset, -1);
+			}
+		//}
+	}
+
+	Channel->PostReceiveSpatialUpdate(Object, TArray<UProperty*>());
+}
+
 void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject* Object, USpatialActorChannel* Channel, bool bIsInitialData, TArray<Schema_FieldId>* ClearedIds)
 {
 	bool bAutonomousProxy = Channel->IsClientAutonomousProxy();

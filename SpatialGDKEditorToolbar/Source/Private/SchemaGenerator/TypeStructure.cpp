@@ -476,6 +476,8 @@ TSharedPtr<FUnrealType> CreateUnrealTypeInfo(UStruct* Type, uint32 ParentChecksu
 		return true;
 	}, false);
 
+	// TODO: add InitialSnapshotData?
+
 	return TypeNode;
 }
 
@@ -540,6 +542,7 @@ FCmdHandlePropertyMap GetFlatInitialSnapshotData(TSharedPtr<FUnrealType> TypeInf
 	uint16 Handle = 1;
 	VisitAllProperties(TypeInfo, [&InitialSnapshotData, &Handle](TSharedPtr<FUnrealProperty> PropertyInfo)
 	{
+		// TODO: make sure this matches (or uses result of) type binding
 		if (!PropertyInfo->HandoverData.IsValid() &&
 			!PropertyInfo->ReplicationData.IsValid() &&
 			((PropertyInfo->Property->PropertyFlags & EPropertyFlags::CPF_Transient) == 0))
