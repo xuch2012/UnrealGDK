@@ -39,6 +39,12 @@ struct PendingAddComponentWrapper
 	TSharedPtr<improbable::Component> Data;
 };
 
+struct WorkingSet
+{
+	TSet<AActor*> Actors;
+	TSet<FUnrealObjectRef> UnresolvedRefs;
+};
+
 struct FObjectReferences
 {
 	FObjectReferences() = default;
@@ -149,6 +155,11 @@ private:
 	void ResolveIncomingRPCs(UObject* Object, const FUnrealObjectRef& ObjectRef);
 	void ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved);
 
+	void ReceiveWorkingSet(AActor* Entity, USpatialActorChannel* Channel);
+	void MergeWorkingSets(AActor* Current, AActor* Other);
+	void MergeWorkingSets(TSharedPtr<WorkingSet> Current, TSharedPtr<WorkingSet> Other);
+	void SpawnWorkingSet(TSharedPtr<WorkingSet> ActorWorkingSet);
+
 	UObject* GetTargetObjectFromChannelAndClass(USpatialActorChannel* Channel, UClass* Class);
 
 	USpatialActorChannel* PopPendingActorRequest(Worker_RequestId RequestId);
@@ -192,6 +203,9 @@ private:
 	TArray<Worker_AuthorityChangeOp> PendingAuthorityChanges;
 	TArray<PendingAddComponentWrapper> PendingAddComponents;
 	TArray<Worker_EntityId> PendingRemoveEntities;
+
+	TMap<AActor*, TSharedPtr<WorkingSet>> WorkingSets;
+	TMap<FUnrealObjectRef, TSharedPtr<WorkingSet>> UnresolvedWorkingSetRefs;
 
 	TMap<Worker_RequestId, USpatialActorChannel*> PendingActorRequests;
 	FReliableRPCMap PendingReliableRPCs;
