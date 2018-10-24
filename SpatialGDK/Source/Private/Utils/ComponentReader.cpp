@@ -17,12 +17,13 @@ DEFINE_LOG_CATEGORY(LogSpatialComponentReader);
 namespace improbable
 {
 
-ComponentReader::ComponentReader(USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap, TSet<FUnrealObjectRef>& InUnresolvedRefs)
+ComponentReader::ComponentReader(USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap, TSet<FUnrealObjectRef>& InUnresolvedRefs, bool bInCallRepNotifies)
 	: PackageMap(InNetDriver->PackageMap)
 	, NetDriver(InNetDriver)
 	, TypebindingManager(InNetDriver->TypebindingManager)
 	, RootObjectReferencesMap(InObjectReferencesMap)
 	, UnresolvedRefs(InUnresolvedRefs)
+	, bCallRepNotifies(bInCallRepNotifies)
 {
 }
 
@@ -203,7 +204,7 @@ void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject*
 				}
 
 				// Parent.Property is the "root" replicated property, e.g. if a struct property was flattened
-				if (Parent.Property->HasAnyPropertyFlags(CPF_RepNotify))
+				if (Parent.Property->HasAnyPropertyFlags(CPF_RepNotify) && bCallRepNotifies)
 				{
 					if (Parent.RepNotifyCondition == REPNOTIFY_Always || !Cmd.Property->Identical(RepState->StaticBuffer.GetData() + SwappedCmd.Offset, Data))
 					{

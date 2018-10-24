@@ -1,4 +1,5 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
+#pragma optimize("", off)
 
 #include "SpatialReceiver.h"
 
@@ -268,6 +269,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 			return;
 		}
 
+		/*
 		if (!UnrealMetadata->StaticPath.IsEmpty())
 		{
 			// Try to find static actor in level
@@ -290,11 +292,15 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 				checkf(EntityActor->bNetLoadOnClient, TEXT("Resolved static replicated actor with NetLoadOnClient == false: %lld %s"), EntityId, *FullPath);
 			}
 		}
+		*/
 
 		UNetConnection* Connection = nullptr;
 		improbable::UnrealMetadata* UnrealMetadataComponent = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
 		check(UnrealMetadataComponent);
 		bool bDoingDeferredSpawn = false;
+
+		// Used to account for transform offset for stably-named actors used as spawn templates.
+		FTransform SpawnTransformOffset = FTransform::Identity;
 
 		// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
 		if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
@@ -312,6 +318,68 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 		else
 		{
 			UE_LOG(LogSpatialReceiver, Verbose, TEXT("Spawning a %s whilst checking out an entity."), *ActorClass->GetFullName());
+
+			if (!EntityActor && !UnrealMetadata->StaticPath.IsEmpty())
+			{
+				if (!NetDriver->IsServer())
+				{
+					bool noop = true;
+				}
+				else
+				{
+					bool noop = true;
+				}
+				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
+				UObject* FoundObject = StaticLoadObject(AActor::StaticClass(), nullptr, *UnrealMetadata->StaticPath);
+				if (AActor* FoundActor = Cast<AActor>(FoundObject))
+				{
+					FActorSpawnParameters SpawnParams;
+					// Pass the actor from the map package in as a template so all instance-modified values are retained.
+					SpawnParams.Template = FoundActor;
+					SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+					//bRemoteOwned needs to be public in source code. This might be a controversial change.
+					SpawnParams.bRemoteOwned = !NetDriver->IsServer();
+					SpawnParams.bNoFail = true;
+					// We defer the construction in the GDK pipeline to allow initialization of replicated properties first.
+					SpawnParams.bDeferConstruction = true;
+
+					FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+					FRotator InitialRotation = Rotation->ToFRotator();
+
+					FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+					FTransform SpawnTransform(InitialRotation, SpawnLocation);
+
+					// Generate an offset between the desired transform (SpawnTransform) and that of the template actor's root component.
+					// We will pass this into FinishSpawning down below to make sure it matches what actually gets passed to SpawnActor,
+					// to prevent it from thinking we desire an additional offset.
+					// Note that it would be "cleaner" to zero out the template actor's root component transform, but we don't want to
+					// modify that data, and copying the actor is more expensive tha doing this.
+					USceneComponent* TemplateRootComponent = FoundActor->GetRootComponent();
+					if(TemplateRootComponent)
+					{
+						TemplateRootComponent->UpdateComponentToWorld();
+						SpawnTransformOffset = TemplateRootComponent->GetComponentToWorld().Inverse() * SpawnTransform;
+					}
+
+					//EntityActor = World->SpawnActorAbsolute(ActorClass, SpawnTransform, SpawnParams);
+
+					UObject* ClonedObject = StaticDuplicateObject(FoundObject, World);
+					EntityActor = Cast<AActor>(ClonedObject);
+
+					if (EntityActor == nullptr || !EntityActor->IsA(FoundObject->GetClass()))
+					{
+						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to clone actor from map package, result was wrong class. Entity ID %lld, template path %s. Expected class: %s, got class %s"),
+							EntityId, *FoundActor->GetFullName(), *FoundActor->GetClass()->GetName(),
+							ClonedObject ? *ClonedObject->GetClass()->GetName() : TEXT(""));
+						EntityActor = nullptr;
+					}
+					else
+					{
+						UE_LOG(LogSpatialReceiver, Log, TEXT("Spawned actor for snapshot entity %lld from template %s"), EntityId, *FoundActor->GetFullName());
+						bDoingDeferredSpawn = true;
+					}
+				}
+			}
 
 			if (!EntityActor)
 			{
@@ -353,9 +421,11 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 		if (bDoingDeferredSpawn)
 		{
-			FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
-			FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
-			EntityActor->FinishSpawning(FTransform(Rotation->ToFRotator(), SpawnLocation));
+			//FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+			//FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+			// Pass in the offset here because FinishSpawning assumes a transform relative to the root component's offset. If we pass in the
+			// desired final transform, it will be applied twice.
+			EntityActor->FinishSpawning(SpawnTransformOffset);
 		}
 
 		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, UnrealMetadataComponent->SubobjectNameToOffset);
@@ -538,7 +608,7 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 		FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
 		TSet<FUnrealObjectRef> UnresolvedRefs;
 
-		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
+		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs, /* bCallRepNotifies */ false);
 		Reader.ApplyComponentData(Data, TargetObject, Channel, /* bIsHandover */ false);
 
 		QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
@@ -548,7 +618,7 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 		FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
 		TSet<FUnrealObjectRef> UnresolvedRefs;
 
-		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
+		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs, /* bCallRepNotifies */ false);
 		Reader.ApplyComponentData(Data, TargetObject, Channel, /* bIsHandover */ true);
 
 		QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
@@ -761,7 +831,7 @@ void USpatialReceiver::ApplyComponentUpdate(const Worker_ComponentUpdate& Compon
 
 	FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
 	TSet<FUnrealObjectRef> UnresolvedRefs;
-	ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
+	ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs, /* blCallRepNotifies */ true);
 	Reader.ApplyComponentUpdate(ComponentUpdate, TargetObject, Channel, bIsHandover);
 
 	QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
@@ -1159,3 +1229,5 @@ void USpatialReceiver::ReceiveRPCCommandRequest(const Worker_CommandRequest& Com
 
 	ApplyRPC(TargetObject, Function, PayloadData, CountBits);
 }
+
+#pragma optimize("", on)
