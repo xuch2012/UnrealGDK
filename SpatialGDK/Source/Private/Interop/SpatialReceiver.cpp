@@ -232,7 +232,6 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 	improbable::Position* Position = StaticComponentView->GetComponentData<improbable::Position>(EntityId);
 	improbable::Metadata* Metadata = StaticComponentView->GetComponentData<improbable::Metadata>(EntityId);
 	improbable::Rotation* Rotation = StaticComponentView->GetComponentData<improbable::Rotation>(EntityId);
-	improbable::UnrealMetadata* UnrealMetadata = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
 
 	check(Position && Metadata);
 
@@ -269,38 +268,10 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 			return;
 		}
 
-		/*
-		if (!UnrealMetadata->StaticPath.IsEmpty())
-		{
-			// Try to find static actor in level
-			FString FullPath = UnrealMetadata->StaticPath;
-			if (GEngine)
-			{
-				if (!GEngine->NetworkRemapPath(NetDriver, FullPath))
-				{
-					UE_LOG(LogSpatialReceiver, Error, TEXT("NetworkRemapPath failed for %s"), *FullPath);
-				}
-			}
-			UE_LOG(LogSpatialReceiver, Log, TEXT("Searching for checked-out static actor with entity id %lld and path %s"), EntityId, *FullPath);
-			EntityActor = FindObject<AActor>(ANY_PACKAGE, *FullPath);
-
-			// If found, make sure it's got netLoadOnClient checked
-			if (EntityActor)
-			{
-				UE_LOG(LogSpatialReceiver, Log, TEXT("Resolved checked-out static actor with entity id %lld and path %s to %s"),
-					EntityId, *FullPath, *EntityActor->GetFullName());
-				checkf(EntityActor->bNetLoadOnClient, TEXT("Resolved static replicated actor with NetLoadOnClient == false: %lld %s"), EntityId, *FullPath);
-			}
-		}
-		*/
-
 		UNetConnection* Connection = nullptr;
 		improbable::UnrealMetadata* UnrealMetadataComponent = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
 		check(UnrealMetadataComponent);
 		bool bDoingDeferredSpawn = false;
-
-		// Used to account for transform offset for stably-named actors used as spawn templates.
-		FTransform SpawnTransformOffset = FTransform::Identity;
 
 		// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
 		if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
@@ -319,9 +290,9 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 		{
 			UE_LOG(LogSpatialReceiver, Verbose, TEXT("Spawning a %s whilst checking out an entity."), *ActorClass->GetFullName());
 
-			if (!EntityActor && !UnrealMetadata->StaticPath.IsEmpty())
+			if (!EntityActor && !UnrealMetadataComponent->StaticPath.IsEmpty())
 			{
-				if (!NetDriver->IsServer())
+				if (NetDriver->IsServer())
 				{
 					bool noop = true;
 				}
@@ -329,60 +300,69 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 				{
 					bool noop = true;
 				}
+
+				////////////////////////////////////////////////////////////////////////////////////////////////////	
 				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
-				UObject* FoundObject = StaticLoadObject(AActor::StaticClass(), nullptr, *UnrealMetadata->StaticPath);
-				if (AActor* FoundActor = Cast<AActor>(FoundObject))
-				{
-					FActorSpawnParameters SpawnParams;
-					// Pass the actor from the map package in as a template so all instance-modified values are retained.
-					SpawnParams.Template = FoundActor;
-					SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-					//bRemoteOwned needs to be public in source code. This might be a controversial change.
-					SpawnParams.bRemoteOwned = !NetDriver->IsServer();
-					SpawnParams.bNoFail = true;
-					// We defer the construction in the GDK pipeline to allow initialization of replicated properties first.
-					//SpawnParams.bDeferConstruction = true;
-
-					FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
-					FRotator InitialRotation = Rotation->ToFRotator();
-
-					FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
-					FTransform SpawnTransform(InitialRotation, SpawnLocation);
-
-					// Generate an offset between the desired transform (SpawnTransform) and that of the template actor's root component.
-					// We will pass this into FinishSpawning down below to make sure it matches what actually gets passed to SpawnActor,
-					// to prevent it from thinking we desire an additional offset.
-					// Note that it would be "cleaner" to zero out the template actor's root component transform, but we don't want to
-					// modify that data, and copying the actor is more expensive tha doing this.
-					USceneComponent* TemplateRootComponent = FoundActor->GetRootComponent();
-					if(TemplateRootComponent)
+				([&]() {
+					AActor* StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *UnrealMetadataComponent->StaticPath));
+					if (StaticActor == nullptr)
 					{
-						TemplateRootComponent->UpdateComponentToWorld();
-						SpawnTransformOffset = TemplateRootComponent->GetComponentToWorld().Inverse() * SpawnTransform;
+						UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find static actor for entity %lld with path %s"), EntityId, *UnrealMetadataComponent->StaticPath);
+						return;
 					}
 
-					EntityActor = World->SpawnActorAbsolute(ActorClass, SpawnTransform, SpawnParams);
-
-					//UObject* ClonedObject = StaticDuplicateObject(FoundObject, World->PersistentLevel);
-					//EntityActor = Cast<AActor>(ClonedObject);
-					//EntityActor->RegisterAllComponents();
-
-					if (EntityActor == nullptr || !EntityActor->IsA(FoundObject->GetClass()))
+					AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor);
+					if (NewActor == nullptr)
 					{
-						//UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to clone actor from map package, result was wrong class. Entity ID %lld, template path %s. Expected class: %s, got class %s"),
-						//	EntityId, *FoundActor->GetFullName(), *FoundActor->GetClass()->GetName(),
-						//	ClonedObject ? *ClonedObject->GetClass()->GetName() : TEXT(""));
-						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to clone actor from map package, result was wrong class. Entity ID %lld, template path %s. Expected class: %s, got class %s"),
-							EntityId, *FoundActor->GetFullName(), *FoundActor->GetClass()->GetName(),
-							EntityActor ? *EntityActor->GetClass()->GetName() : TEXT(""));
-						EntityActor = nullptr;
+						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new actor from template for entity %lld, template actor %s"), EntityId, *StaticActor->GetFullName());
+						return;
 					}
-					else
+
+					// Gather the components from the template actor by name.
+					TMap<FString, UActorComponent*> SourceComponentMap;
+					for (UActorComponent* SourceComponent : StaticActor->GetComponents())
 					{
-						UE_LOG(LogSpatialReceiver, Log, TEXT("Spawned actor for snapshot entity %lld from template %s"), EntityId, *FoundActor->GetFullName());
-						bDoingDeferredSpawn = false;
+						SourceComponentMap.Emplace(SourceComponent->GetName(), SourceComponent);
 					}
-				}
+
+					// Walk through the new actor's components and copy over values from the template actor.
+					for (UActorComponent* DestComponent : NewActor->GetComponents())
+					{
+						UActorComponent** SourceComponentPtr = SourceComponentMap.Find(DestComponent->GetName());
+						if (SourceComponentPtr == nullptr || *SourceComponentPtr == nullptr)
+						{
+							UE_LOG(LogSpatialReceiver, Error, TEXT("Couldn't find component data %s to copy from stably-named actor %s for entity %lld (%s)"),
+								*DestComponent->GetFullName(), *StaticActor->GetFullName(), EntityId, *NewActor->GetName());
+							continue;
+						}
+						UActorComponent* SourceComponent = *SourceComponentPtr;
+
+						for (TFieldIterator<UProperty> PropertyIter(DestComponent->GetClass()); PropertyIter; ++PropertyIter)
+						{
+							UProperty* Property = *PropertyIter;
+
+							if (Property->HasAnyPropertyFlags(CPF_Transient))
+							{
+								continue;
+							}
+
+							if (Property->IsA(UObjectProperty::StaticClass()))
+							{
+								// TODO: do something smarter with object references
+								continue;
+							}
+
+							// Copy the actual property value over to the new actor's component.
+							void* Dest = Property->ContainerPtrToValuePtr<void>(DestComponent);
+							void* Src = Property->ContainerPtrToValuePtr<void>(SourceComponent);
+							Property->CopyCompleteValue(Dest, Src);
+						}
+					}
+
+					EntityActor = NewActor;
+					UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"), *NewActor->GetName(), *StaticActor->GetFullName(), EntityId);
+				}());
+				////////////////////////////////////////////////////////////////////////////////////////////////////	
 			}
 
 			if (!EntityActor)
@@ -425,11 +405,9 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 		if (bDoingDeferredSpawn)
 		{
-			//FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
-			//FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
-			// Pass in the offset here because FinishSpawning assumes a transform relative to the root component's offset. If we pass in the
-			// desired final transform, it will be applied twice.
-			EntityActor->FinishSpawning(SpawnTransformOffset);
+			FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+			FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+			EntityActor->FinishSpawning(FTransform(Rotation->ToFRotator(), SpawnLocation));
 		}
 
 		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, UnrealMetadataComponent->SubobjectNameToOffset);
@@ -565,8 +543,12 @@ UClass* USpatialReceiver::GetNativeEntityClass(improbable::Metadata* Metadata)
 	return Class->IsChildOf<AActor>() ? Class : nullptr;
 }
 
-// This function is only called for client and server workers who did not spawn the Actor
 AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred)
+{
+	return CreateActor(Position, Rotation, ActorClass, bDeferred, nullptr);
+}
+
+AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, AActor* ActorTemplate)
 {
 	FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
 	FRotator InitialRotation = Rotation->ToFRotator();
@@ -580,6 +562,8 @@ AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable
 		SpawnInfo.bNoFail = true;
 		// We defer the construction in the GDK pipeline to allow initialization of replicated properties first.
 		SpawnInfo.bDeferConstruction = bDeferred;
+		// Template from which to create the actor. Note that this only copies the actor's instance properties, components' instance values are lost.
+		SpawnInfo.Template = ActorTemplate;
 
 		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
 
