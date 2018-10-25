@@ -1,7 +1,7 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
 #pragma optimize("", off)
 
-#include "ComponentReader.h"
+#include "Utils/ComponentReader.h"
 
 #include "Net/DataReplication.h"
 #include "Net/RepLayout.h"
