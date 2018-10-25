@@ -341,7 +341,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 					SpawnParams.bRemoteOwned = !NetDriver->IsServer();
 					SpawnParams.bNoFail = true;
 					// We defer the construction in the GDK pipeline to allow initialization of replicated properties first.
-					SpawnParams.bDeferConstruction = true;
+					//SpawnParams.bDeferConstruction = true;
 
 					FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
 					FRotator InitialRotation = Rotation->ToFRotator();
@@ -361,22 +361,26 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 						SpawnTransformOffset = TemplateRootComponent->GetComponentToWorld().Inverse() * SpawnTransform;
 					}
 
-					//EntityActor = World->SpawnActorAbsolute(ActorClass, SpawnTransform, SpawnParams);
+					EntityActor = World->SpawnActorAbsolute(ActorClass, SpawnTransform, SpawnParams);
 
-					UObject* ClonedObject = StaticDuplicateObject(FoundObject, World);
-					EntityActor = Cast<AActor>(ClonedObject);
+					//UObject* ClonedObject = StaticDuplicateObject(FoundObject, World->PersistentLevel);
+					//EntityActor = Cast<AActor>(ClonedObject);
+					//EntityActor->RegisterAllComponents();
 
 					if (EntityActor == nullptr || !EntityActor->IsA(FoundObject->GetClass()))
 					{
+						//UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to clone actor from map package, result was wrong class. Entity ID %lld, template path %s. Expected class: %s, got class %s"),
+						//	EntityId, *FoundActor->GetFullName(), *FoundActor->GetClass()->GetName(),
+						//	ClonedObject ? *ClonedObject->GetClass()->GetName() : TEXT(""));
 						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to clone actor from map package, result was wrong class. Entity ID %lld, template path %s. Expected class: %s, got class %s"),
 							EntityId, *FoundActor->GetFullName(), *FoundActor->GetClass()->GetName(),
-							ClonedObject ? *ClonedObject->GetClass()->GetName() : TEXT(""));
+							EntityActor ? *EntityActor->GetClass()->GetName() : TEXT(""));
 						EntityActor = nullptr;
 					}
 					else
 					{
 						UE_LOG(LogSpatialReceiver, Log, TEXT("Spawned actor for snapshot entity %lld from template %s"), EntityId, *FoundActor->GetFullName());
-						bDoingDeferredSpawn = true;
+						bDoingDeferredSpawn = false;
 					}
 				}
 			}
