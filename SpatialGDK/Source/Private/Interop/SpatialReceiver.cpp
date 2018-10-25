@@ -347,21 +347,36 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 								continue;
 							}
 
-							if (Property->IsA(UObjectProperty::StaticClass()))
+							void* Src = Property->ContainerPtrToValuePtr<void>(SourceComponent);
+							if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
 							{
 								// TODO: do something smarter with object references
+								UObject* SourceValue = ObjectProperty->GetPropertyValue(Src);
+								UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s ignoring object reference %s : %s"),
+									EntityId, *NewActor->GetName(),
+									*ObjectProperty->GetName(),
+									SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"));
 								continue;
 							}
 
 							// Copy the actual property value over to the new actor's component.
 							void* Dest = Property->ContainerPtrToValuePtr<void>(DestComponent);
-							void* Src = Property->ContainerPtrToValuePtr<void>(SourceComponent);
 							Property->CopyCompleteValue(Dest, Src);
 						}
 					}
 
+					// Initialize components after copying over their data from the map.
+					check(!NewActor->IsActorInitialized());
+					NewActor->PreInitializeComponents();
+					NewActor->InitializeComponents();
+					NewActor->PostInitializeComponents();
+					check(NewActor->IsActorInitialized());
+
 					EntityActor = NewActor;
-					UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"), *NewActor->GetName(), *StaticActor->GetFullName(), EntityId);
+					UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
+						*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
+
+					// Note that we haven't set bDoingDeferredSpawn here, so FinishSpawning won't get called.
 				}());
 				////////////////////////////////////////////////////////////////////////////////////////////////////	
 			}
@@ -565,6 +580,10 @@ AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable
 		SpawnInfo.bDeferConstruction = bDeferred;
 		// Template from which to create the actor. Note that this only copies the actor's instance properties, components' instance values are lost.
 		SpawnInfo.Template = ActorTemplate;
+		if (ActorTemplate)
+		{
+			SpawnInfo.Name = ActorTemplate->GetFName();
+		}
 
 		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
 
