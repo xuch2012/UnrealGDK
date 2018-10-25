@@ -8,6 +8,7 @@
 #include "EngineClasses/SpatialNetDriver.h"
 #include "EngineClasses/SpatialPackageMapClient.h"
 #include "Interop/SpatialTypebindingManager.h"
+#include "Utils/WorkingSetRegistry.h"
 #include "Schema/StandardLibrary.h"
 #include "Schema/Rotation.h"
 #include "improbable/UnrealObjectRef.h"
@@ -37,12 +38,6 @@ struct PendingAddComponentWrapper
 	Worker_EntityId EntityId;
 	Worker_ComponentId ComponentId;
 	TSharedPtr<improbable::Component> Data;
-};
-
-struct WorkingSet
-{
-	TSet<AActor*> Actors;
-	TSet<FUnrealObjectRef> UnresolvedRefs;
 };
 
 struct FObjectReferences
@@ -188,6 +183,9 @@ private:
 
 	UPROPERTY()
 	UGlobalStateManager* GlobalStateManager;
+
+	UPROPERTY()
+	UWorkingSetRegistry* WorkingSetRegistry;
 
 	FTimerManager* TimerManager;
 
