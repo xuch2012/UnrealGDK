@@ -229,7 +229,25 @@ FNetworkGUID FSpatialNetGUIDCache::GetNetGUIDFromUnrealObjectRefInternal(const F
 		{
 			OuterGUID = GetNetGUIDFromUnrealObjectRef(ObjectRef.Outer.GetValue());
 		}
-		NetGUID = RegisterNetGUIDFromPath(ObjectRef.Path.GetValue(), OuterGUID);
+
+		// Check to see if a NetGUID already exists for this object reference.
+		// TODO: make this more efficient
+		for (auto Pair : ObjectLookup)
+		{
+			if (Pair.Value.PathName.IsEqual(FName(**ObjectRef.Path)) &&
+				Pair.Value.OuterGUID == OuterGUID)
+			{
+				NetGUID = Pair.Key;
+				break;
+			}
+		}
+
+		// If we still haven't found a NetGUID, create a new one.
+		if (!NetGUID.IsValid())
+		{
+			NetGUID = RegisterNetGUIDFromPath(ObjectRef.Path.GetValue(), OuterGUID);
+		}
+
 		RegisterObjectRef(NetGUID, ObjectRef);
 	}
 	return NetGUID;
@@ -280,7 +298,7 @@ FNetworkGUID FSpatialNetGUIDCache::RegisterNetGUIDFromPath(const FString& PathNa
 	FNetGuidCacheObject CacheObject;
 	CacheObject.PathName = FName(*PathName);
 	CacheObject.OuterGUID = OuterGUID;
-	FNetworkGUID NetGUID = GenerateNewNetGUID(0);
+	FNetworkGUID NetGUID = GenerateNewNetGUID(1);  // 1 => static
 	RegisterNetGUID_Internal(NetGUID, CacheObject);
 	return NetGUID;
 }
