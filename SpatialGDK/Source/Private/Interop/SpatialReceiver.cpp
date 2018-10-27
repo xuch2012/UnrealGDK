@@ -9,6 +9,7 @@
 #include "EngineClasses/SpatialActorChannel.h"
 #include "EngineClasses/SpatialNetConnection.h"
 #include "EngineClasses/SpatialPackageMapClient.h"
+#include "Engine/World.h"
 #include "Interop/Connection/SpatialWorkerConnection.h"
 #include "Interop/GlobalStateManager.h"
 #include "Interop/SpatialPlayerSpawner.h"
@@ -274,6 +275,12 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 		check(UnrealMetadataComponent);
 		bool bDoingDeferredSpawn = false;
 
+		FTransform FinalSpawnTransform = [&]() {
+			FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+			FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+			return FTransform(Rotation->ToFRotator(), SpawnLocation);
+		}();
+
 		// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
 		if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
 		{
@@ -312,12 +319,46 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 						return;
 					}
 
-					AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor);
+					AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true);
 					if (NewActor == nullptr)
 					{
-						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new actor from template for entity %lld, template actor %s"), EntityId, *StaticActor->GetFullName());
+						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new actor for entity %lld class %s"), EntityId, *ActorClass->GetName());
 						return;
 					}
+
+					auto CopyAllProperties = [&](UObject* DestObject, UObject* SourceObject)
+					{
+						check(DestObject->IsA(SourceObject->GetClass()));
+
+						for (TFieldIterator<UProperty> PropertyIter(DestObject->GetClass()); PropertyIter; ++PropertyIter)
+						{
+							UProperty* Property = *PropertyIter;
+
+							if (Property->HasAnyPropertyFlags(CPF_Transient))
+							{
+								continue;
+							}
+
+							void* SourcePtr = Property->ContainerPtrToValuePtr<void>(SourceObject);
+							if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
+							{
+								// TODO: do something smarter with object references
+								UObject* SourceValue = ObjectProperty->GetPropertyValue(SourcePtr);
+								UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s ignoring object reference %s : %s"),
+									EntityId, *NewActor->GetName(),
+									*ObjectProperty->GetName(),
+									SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"));
+								continue;
+							}
+
+							// Copy the actual property value over to the new actor's component.
+							void* DestPtr = Property->ContainerPtrToValuePtr<void>(DestObject);
+							Property->CopyCompleteValue(DestPtr, SourcePtr);
+						}
+					};
+
+					// Copy over property values from the template actor into the new one.
+					CopyAllProperties(NewActor, StaticActor);
 
 					// Gather the components from the template actor by name.
 					TMap<FString, UActorComponent*> SourceComponentMap;
@@ -338,31 +379,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 						}
 						UActorComponent* SourceComponent = *SourceComponentPtr;
 
-						for (TFieldIterator<UProperty> PropertyIter(DestComponent->GetClass()); PropertyIter; ++PropertyIter)
-						{
-							UProperty* Property = *PropertyIter;
-
-							if (Property->HasAnyPropertyFlags(CPF_Transient))
-							{
-								continue;
-							}
-
-							void* Src = Property->ContainerPtrToValuePtr<void>(SourceComponent);
-							if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
-							{
-								// TODO: do something smarter with object references
-								UObject* SourceValue = ObjectProperty->GetPropertyValue(Src);
-								UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s ignoring object reference %s : %s"),
-									EntityId, *NewActor->GetName(),
-									*ObjectProperty->GetName(),
-									SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"));
-								continue;
-							}
-
-							// Copy the actual property value over to the new actor's component.
-							void* Dest = Property->ContainerPtrToValuePtr<void>(DestComponent);
-							Property->CopyCompleteValue(Dest, Src);
-						}
+						CopyAllProperties(DestComponent, SourceComponent);
 					}
 
 					// Initialize components after copying over their data from the map.
@@ -376,7 +393,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 					UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
 						*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
 
-					// Note that we haven't set bDoingDeferredSpawn here, so FinishSpawning won't get called.
+					bDoingDeferredSpawn = true;
 				}());
 				////////////////////////////////////////////////////////////////////////////////////////////////////	
 			}
@@ -421,9 +438,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 		if (bDoingDeferredSpawn)
 		{
-			FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
-			FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
-			EntityActor->FinishSpawning(FTransform(Rotation->ToFRotator(), SpawnLocation));
+			EntityActor->FinishSpawning(FinalSpawnTransform);
 		}
 
 		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, UnrealMetadataComponent->SubobjectNameToOffset);
