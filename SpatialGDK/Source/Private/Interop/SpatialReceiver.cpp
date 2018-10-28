@@ -319,7 +319,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 						return;
 					}
 
-					AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true);
+					AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor->GetFName());
 					if (NewActor == nullptr)
 					{
 						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new actor for entity %lld class %s"), EntityId, *ActorClass->GetName());
@@ -394,6 +394,8 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 						*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
 
 					bDoingDeferredSpawn = true;
+					EntityActor->UpdateComponentTransforms();
+					//FinalSpawnTransform.SetScale3D(EntityActor->GetActorScale3D());
 				}());
 				////////////////////////////////////////////////////////////////////////////////////////////////////	
 			}
@@ -576,10 +578,10 @@ UClass* USpatialReceiver::GetNativeEntityClass(improbable::Metadata* Metadata)
 
 AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred)
 {
-	return CreateActor(Position, Rotation, ActorClass, bDeferred, nullptr);
+	return CreateActor(Position, Rotation, ActorClass, bDeferred, NAME_None);
 }
 
-AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, AActor* ActorTemplate)
+AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, FName ActorName)
 {
 	FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
 	FRotator InitialRotation = Rotation->ToFRotator();
@@ -593,11 +595,9 @@ AActor* USpatialReceiver::CreateActor(improbable::Position* Position, improbable
 		SpawnInfo.bNoFail = true;
 		// We defer the construction in the GDK pipeline to allow initialization of replicated properties first.
 		SpawnInfo.bDeferConstruction = bDeferred;
-		// Template from which to create the actor. Note that this only copies the actor's instance properties, components' instance values are lost.
-		SpawnInfo.Template = ActorTemplate;
-		if (ActorTemplate)
+		if (!ActorName.IsNone())
 		{
-			SpawnInfo.Name = ActorTemplate->GetFName();
+			SpawnInfo.Name = ActorName;
 		}
 
 		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
