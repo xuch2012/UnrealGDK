@@ -334,26 +334,55 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 						{
 							UProperty* Property = *PropertyIter;
 
+							// TODO: do only instance editable properties?
 							if (Property->HasAnyPropertyFlags(CPF_Transient))
 							{
 								continue;
 							}
 
 							void* SourcePtr = Property->ContainerPtrToValuePtr<void>(SourceObject);
+							void* DestPtr = Property->ContainerPtrToValuePtr<void>(DestObject);
+
 							if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
 							{
 								// TODO: do something smarter with object references
 								UObject* SourceValue = ObjectProperty->GetPropertyValue(SourcePtr);
-								UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s ignoring object reference %s : %s"),
-									EntityId, *NewActor->GetName(),
-									*ObjectProperty->GetName(),
-									SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"));
-								continue;
-							}
 
-							// Copy the actual property value over to the new actor's component.
-							void* DestPtr = Property->ContainerPtrToValuePtr<void>(DestObject);
-							Property->CopyCompleteValue(DestPtr, SourcePtr);
+								if (SourceValue && !SourceValue->IsFullNameStableForNetworking())
+								{
+									FString RefPath = SourceValue->GetPathName();
+
+									// Fix up the path so its references map to the current world (important for PIE).
+									if (GEngine)
+									{
+										GEngine->NetworkRemapPath(NetDriver, RefPath);
+									}
+
+									UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG attempting to resolve object reference %s"), *RefPath);
+
+									UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
+									if (RefTarget)
+									{
+										ObjectProperty->SetObjectPropertyValue(DestPtr, RefTarget);
+										UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s mapping object reference %s to object %s"),
+											EntityId, *NewActor->GetName(),
+											*ObjectProperty->GetName(),
+											RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"));
+									}
+								}
+								else
+								{
+									UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s ignoring object reference %s : %s"),
+										EntityId, *NewActor->GetName(),
+										*ObjectProperty->GetName(),
+										SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"));
+								}
+							}
+							else
+							{
+								// Copy the actual property value over to the new actor's component.
+								Property->CopyCompleteValue(DestPtr, SourcePtr);
+							}
 						}
 					};
 
@@ -395,7 +424,6 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 					bDoingDeferredSpawn = true;
 					EntityActor->UpdateComponentTransforms();
-					//FinalSpawnTransform.SetScale3D(EntityActor->GetActorScale3D());
 				}());
 				////////////////////////////////////////////////////////////////////////////////////////////////////	
 			}
