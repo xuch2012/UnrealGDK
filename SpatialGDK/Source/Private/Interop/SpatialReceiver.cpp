@@ -280,6 +280,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 			FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
 			return FTransform(Rotation->ToFRotator(), SpawnLocation);
 		}();
+		USceneComponent* NewAttachParent = nullptr;
 
 		// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
 		if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
@@ -345,7 +346,6 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 							if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
 							{
-								// TODO: do something smarter with object references
 								UObject* SourceValue = ObjectProperty->GetPropertyValue(SourcePtr);
 
 								if (SourceValue && !SourceValue->IsFullNameStableForNetworking())
@@ -360,14 +360,37 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 									UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG attempting to resolve object reference %s"), *RefPath);
 
+									// TODO: add to unresolved references if not found
 									UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
 									if (RefTarget)
 									{
-										ObjectProperty->SetObjectPropertyValue(DestPtr, RefTarget);
-										UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s mapping object reference %s to object %s"),
-											EntityId, *NewActor->GetName(),
+										if (ObjectProperty->GetName().Contains(TEXT("AttachParent")) && RefTarget->IsA(UChildActorComponent::StaticClass()))
+										{
+											// Special case. Add ourselves to the parent's AttachChildren array, as well as set the ChildActor property.
+											// TODO: handle non-ChildActorComponent AttachParent
+											// TODO: handle replicated ChildActorComponent as well
+											UChildActorComponent* ChildActorComponent = Cast<UChildActorComponent>(RefTarget);
+											NewAttachParent = ChildActorComponent;
+											UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s assigning myself as a child to object %s because of property %s"),
+												EntityId, *NewActor->GetName(),
+												RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"),
+												*ObjectProperty->GetName());
+										}
+										else
+										{
+											ObjectProperty->SetObjectPropertyValue(DestPtr, RefTarget);
+											UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s mapping object reference %s to object %s"),
+												EntityId, *NewActor->GetName(),
+												*ObjectProperty->GetName(),
+												RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"));
+										}
+									}
+									else
+									{
+										UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s failed to resolve object reference %s in stably-named actor %s"),
+											EntityId, 
 											*ObjectProperty->GetName(),
-											RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"));
+											*NewActor->GetName());
 									}
 								}
 								else
@@ -468,7 +491,16 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 		if (bDoingDeferredSpawn)
 		{
+			if (NewAttachParent)
+			{
+				NewAttachParent->ConditionalUpdateComponentToWorld();
+				FinalSpawnTransform = NewAttachParent->GetComponentTransform();
+			}
 			EntityActor->FinishSpawning(FinalSpawnTransform);
+			if (NewAttachParent)
+			{
+				EntityActor->AttachToComponent(NewAttachParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			}
 		}
 
 		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, UnrealMetadataComponent->SubobjectNameToOffset);
