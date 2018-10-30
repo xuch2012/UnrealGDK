@@ -730,16 +730,6 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 
 		QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
 	}
-	//else if (Data.component_id == Info->InitialSnapshotComponent)
-	//{
-	//	FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
-	//	TSet<FUnrealObjectRef> UnresolvedRefs;
-
-	//	ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
-	//	Reader.ApplyInitialSnapshotData(Data, TargetObject, Channel);
-
-	//	QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
-	//}
 	else
 	{
 		UE_LOG(LogSpatialReceiver, Verbose, TEXT("Entity: %d Component: %d - Skipping because RPC components don't have actual data."), EntityId, Data.component_id);
