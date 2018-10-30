@@ -131,6 +131,7 @@ private:
 	// These functions are only called for client and server workers who did not spawn the Actor.
 	AActor* CreateActor(improbable::Position* Position, struct improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred);
 	AActor* CreateActor(improbable::Position* Position, struct improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, FName ActorName);
+	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId, USceneComponent*& OutNewAttachParent);
 
 	UClass* GetNativeEntityClass(improbable::Metadata* Metadata);
 

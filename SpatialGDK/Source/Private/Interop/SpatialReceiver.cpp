@@ -223,6 +223,167 @@ void USpatialReceiver::HandleActorAuthority(Worker_AuthorityChangeOp& Op)
 	}
 }
 
+namespace {
+void CopyAllObjectProperties(UObject* DestObject, UObject* SourceObject, UNetDriver* NetDriver, const FString& ActorNameForLogging, USceneComponent*& OutNewAttachParent)
+{
+	check(DestObject->IsA(SourceObject->GetClass()));
+
+	for (TFieldIterator<UProperty> PropertyIter(DestObject->GetClass()); PropertyIter; ++PropertyIter)
+	{
+		UProperty* Property = *PropertyIter;
+
+		// TODO: do only instance editable properties?
+		if (Property->HasAnyPropertyFlags(CPF_Transient))
+		{
+			continue;
+		}
+
+		void* SourcePtr = Property->ContainerPtrToValuePtr<void>(SourceObject);
+		void* DestPtr = Property->ContainerPtrToValuePtr<void>(DestObject);
+
+		if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
+		{
+			UObject* SourceValue = ObjectProperty->GetPropertyValue(SourcePtr);
+
+			if (SourceValue && !SourceValue->IsFullNameStableForNetworking())
+			{
+				FString RefPath = SourceValue->GetPathName();
+
+				// Fix up the path so its references map to the current world (important for PIE).
+				if (GEngine)
+				{
+					GEngine->NetworkRemapPath(NetDriver, RefPath);
+				}
+
+				UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s attempting to resolve object reference %s"),
+					*ActorNameForLogging, *RefPath);
+
+				// TODO: add to unresolved references if not found
+				UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
+				if (RefTarget)
+				{
+					// TODO: handle non-ChildActorComponent AttachParent
+					if (ObjectProperty->GetName().Contains(TEXT("AttachParent")) && RefTarget->IsA(UChildActorComponent::StaticClass()))
+					{
+						// Special case. Add ourselves to the parent's AttachChildren array, as well as set the ChildActor property.
+						// TODO: handle replicated ChildActorComponent as well
+						UChildActorComponent* ChildActorComponent = Cast<UChildActorComponent>(RefTarget);
+						OutNewAttachParent = ChildActorComponent;
+						UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s assigning myself as a child to object %s because of property %s"),
+
+							*ActorNameForLogging,
+							RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"),
+							*ObjectProperty->GetName());
+					}
+					else
+					{
+						ObjectProperty->SetObjectPropertyValue(DestPtr, RefTarget);
+						UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s mapping object reference %s to object %s"),
+							*ActorNameForLogging,
+							*ObjectProperty->GetName(),
+							RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"));
+					}
+				}
+				else
+				{
+					UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s failed to resolve object reference %s for property %s"),
+						*ActorNameForLogging,
+						*RefPath,
+						*ObjectProperty->GetName());
+				}
+			}
+			else
+			{
+				UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s ignoring object reference %s for property %s"),
+					*ActorNameForLogging,
+					SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"),
+					*ObjectProperty->GetName());
+			}
+		}
+		else
+		{
+			// Copy the actual property value over to the new actor's component.
+			Property->CopyCompleteValue(DestPtr, SourcePtr);
+		}
+	}
+}
+
+void CopyAllObjectProperties(UObject* DestObject, UObject* SourceObject, UNetDriver* NetDriver, const FString& ActorNameForLogging)
+{
+	USceneComponent* DummyNewAttachParent = nullptr;
+	CopyAllObjectProperties(DestObject, SourceObject, NetDriver, ActorNameForLogging, DummyNewAttachParent);
+}
+
+void CopyAllComponentProperties(AActor* DestActor, AActor* SourceActor, UNetDriver* NetDriver, const FString& ActorNameForLogging, USceneComponent*& OutNewAttachParent)
+{
+	// Gather the components from the template actor by name.
+	TMap<FString, UActorComponent*> SourceComponentMap;
+	for (UActorComponent* SourceComponent : SourceActor->GetComponents())
+	{
+		SourceComponentMap.Emplace(SourceComponent->GetName(), SourceComponent);
+	}
+
+	// Walk through the new actor's components and copy over values from the template actor.
+	USceneComponent* DestRootComponent = DestActor->GetRootComponent();
+	for (UActorComponent* DestComponent : DestActor->GetComponents())
+	{
+		UActorComponent** SourceComponentPtr = SourceComponentMap.Find(DestComponent->GetName());
+		if (SourceComponentPtr == nullptr || *SourceComponentPtr == nullptr)
+		{
+			UE_LOG(LogSpatialReceiver, Error, TEXT("Couldn't find component data %s to copy to stably-named actor %s from %s"),
+				*DestComponent->GetFullName(), *ActorNameForLogging, *SourceActor->GetFullName());
+			continue;
+		}
+		UActorComponent* SourceComponent = *SourceComponentPtr;
+
+		if (DestComponent == DestRootComponent)
+		{
+			CopyAllObjectProperties(DestComponent, SourceComponent, NetDriver, ActorNameForLogging, OutNewAttachParent);
+		}
+		else
+		{
+			CopyAllObjectProperties(DestComponent, SourceComponent, NetDriver, ActorNameForLogging);
+		}
+	}
+}
+}
+
+AActor* USpatialReceiver::CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId, USceneComponent*& OutNewAttachParent)
+{
+	AActor* StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *StablePath));
+	if (StaticActor == nullptr)
+	{
+		UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find stably-named actor for entity %lld with path %s"), EntityId, *StablePath);
+		return nullptr;
+	}
+
+	AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor->GetFName());
+	if (NewActor == nullptr)
+	{
+		UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new stably-named actor for entity %lld from template %s"), EntityId, *StaticActor->GetFullName());
+		return nullptr;
+	}
+
+	// Copy over property values from the template actor into the new one.
+	FString ActorNameForLogging = FString::Printf(TEXT("%s (entity %lld)"), *NewActor->GetFullName(), EntityId);
+	CopyAllObjectProperties(NewActor, StaticActor, NetDriver, ActorNameForLogging, OutNewAttachParent);
+	CopyAllComponentProperties(NewActor, StaticActor, NetDriver, ActorNameForLogging, OutNewAttachParent);
+
+	// Initialize components after copying over their data from the map.
+	check(!NewActor->IsActorInitialized());
+	NewActor->PreInitializeComponents();
+	NewActor->InitializeComponents();
+	NewActor->PostInitializeComponents();
+	check(NewActor->IsActorInitialized());
+
+	UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
+		*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
+
+	NewActor->UpdateComponentTransforms();
+
+	return NewActor;
+}
+
 void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 {
 	checkf(World, TEXT("We should have a world whilst processing ops."));
@@ -299,163 +460,26 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 		{
 			UE_LOG(LogSpatialReceiver, Verbose, TEXT("Spawning a %s whilst checking out an entity."), *ActorClass->GetFullName());
 
-			if (!EntityActor && !UnrealMetadataComponent->StaticPath.IsEmpty())
+			if (EntityActor == nullptr && !UnrealMetadataComponent->StaticPath.IsEmpty())
 			{
-				if (NetDriver->IsServer())
-				{
-					bool noop = true;
-				}
-				else
-				{
-					bool noop = true;
-				}
-
-				////////////////////////////////////////////////////////////////////////////////////////////////////	
 				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
-				([&]() {
-					AActor* StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *UnrealMetadataComponent->StaticPath));
-					if (StaticActor == nullptr)
-					{
-						UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find static actor for entity %lld with path %s"), EntityId, *UnrealMetadataComponent->StaticPath);
-						return;
-					}
-
-					AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor->GetFName());
-					if (NewActor == nullptr)
-					{
-						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new actor for entity %lld class %s"), EntityId, *ActorClass->GetName());
-						return;
-					}
-
-					auto CopyAllProperties = [&](UObject* DestObject, UObject* SourceObject)
-					{
-						check(DestObject->IsA(SourceObject->GetClass()));
-
-						for (TFieldIterator<UProperty> PropertyIter(DestObject->GetClass()); PropertyIter; ++PropertyIter)
-						{
-							UProperty* Property = *PropertyIter;
-
-							// TODO: do only instance editable properties?
-							if (Property->HasAnyPropertyFlags(CPF_Transient))
-							{
-								continue;
-							}
-
-							void* SourcePtr = Property->ContainerPtrToValuePtr<void>(SourceObject);
-							void* DestPtr = Property->ContainerPtrToValuePtr<void>(DestObject);
-
-							if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
-							{
-								UObject* SourceValue = ObjectProperty->GetPropertyValue(SourcePtr);
-
-								if (SourceValue && !SourceValue->IsFullNameStableForNetworking())
-								{
-									FString RefPath = SourceValue->GetPathName();
-
-									// Fix up the path so its references map to the current world (important for PIE).
-									if (GEngine)
-									{
-										GEngine->NetworkRemapPath(NetDriver, RefPath);
-									}
-
-									UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG attempting to resolve object reference %s"), *RefPath);
-
-									// TODO: add to unresolved references if not found
-									UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
-									if (RefTarget)
-									{
-										if (ObjectProperty->GetName().Contains(TEXT("AttachParent")) && RefTarget->IsA(UChildActorComponent::StaticClass()))
-										{
-											// Special case. Add ourselves to the parent's AttachChildren array, as well as set the ChildActor property.
-											// TODO: handle non-ChildActorComponent AttachParent
-											// TODO: handle replicated ChildActorComponent as well
-											UChildActorComponent* ChildActorComponent = Cast<UChildActorComponent>(RefTarget);
-											NewAttachParent = ChildActorComponent;
-											UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s assigning myself as a child to object %s because of property %s"),
-												EntityId, *NewActor->GetName(),
-												RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"),
-												*ObjectProperty->GetName());
-										}
-										else
-										{
-											ObjectProperty->SetObjectPropertyValue(DestPtr, RefTarget);
-											UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s mapping object reference %s to object %s"),
-												EntityId, *NewActor->GetName(),
-												*ObjectProperty->GetName(),
-												RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"));
-										}
-									}
-									else
-									{
-										UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s failed to resolve object reference %s in stably-named actor %s"),
-											EntityId, 
-											*ObjectProperty->GetName(),
-											*NewActor->GetName());
-									}
-								}
-								else
-								{
-									UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG %lld %s ignoring object reference %s : %s"),
-										EntityId, *NewActor->GetName(),
-										*ObjectProperty->GetName(),
-										SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"));
-								}
-							}
-							else
-							{
-								// Copy the actual property value over to the new actor's component.
-								Property->CopyCompleteValue(DestPtr, SourcePtr);
-							}
-						}
-					};
-
-					// Copy over property values from the template actor into the new one.
-					CopyAllProperties(NewActor, StaticActor);
-
-					// Gather the components from the template actor by name.
-					TMap<FString, UActorComponent*> SourceComponentMap;
-					for (UActorComponent* SourceComponent : StaticActor->GetComponents())
-					{
-						SourceComponentMap.Emplace(SourceComponent->GetName(), SourceComponent);
-					}
-
-					// Walk through the new actor's components and copy over values from the template actor.
-					for (UActorComponent* DestComponent : NewActor->GetComponents())
-					{
-						UActorComponent** SourceComponentPtr = SourceComponentMap.Find(DestComponent->GetName());
-						if (SourceComponentPtr == nullptr || *SourceComponentPtr == nullptr)
-						{
-							UE_LOG(LogSpatialReceiver, Error, TEXT("Couldn't find component data %s to copy from stably-named actor %s for entity %lld (%s)"),
-								*DestComponent->GetFullName(), *StaticActor->GetFullName(), EntityId, *NewActor->GetName());
-							continue;
-						}
-						UActorComponent* SourceComponent = *SourceComponentPtr;
-
-						CopyAllProperties(DestComponent, SourceComponent);
-					}
-
-					// Initialize components after copying over their data from the map.
-					check(!NewActor->IsActorInitialized());
-					NewActor->PreInitializeComponents();
-					NewActor->InitializeComponents();
-					NewActor->PostInitializeComponents();
-					check(NewActor->IsActorInitialized());
-
-					EntityActor = NewActor;
-					UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
-						*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
-
-					bDoingDeferredSpawn = true;
-					EntityActor->UpdateComponentTransforms();
-				}());
-				////////////////////////////////////////////////////////////////////////////////////////////////////	
+				// Note that this can fail and return a null actor.
+				EntityActor = CreateNewStablyNamedActor(*UnrealMetadataComponent->StaticPath, Position, Rotation, ActorClass, EntityId, NewAttachParent);
 			}
 
-			if (!EntityActor)
+			if (EntityActor == nullptr)
 			{
 				EntityActor = CreateActor(Position, Rotation, ActorClass, true);
-				bDoingDeferredSpawn = true;
 			}
+
+			if (EntityActor == nullptr)
+			{
+				// If we've gotten this far and still don't have an actor, something has gone wrong, so early out.
+				UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to spawn an actor for entity %lld of class %s"), EntityId, *ActorClass->GetFullName());
+				return;
+			}
+
+			bDoingDeferredSpawn = true;
 
 			// Don't have authority over Actor until SpatialOS delegates authority
 			EntityActor->Role = ROLE_SimulatedProxy;
