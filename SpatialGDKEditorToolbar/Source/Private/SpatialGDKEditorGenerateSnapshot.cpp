@@ -229,7 +229,6 @@ TArray<Worker_ComponentData> CreateStartupActorData(USpatialActorChannel* Channe
 
 	FRepChangeState InitialRepChanges = Channel->CreateInitialRepChangeState(Actor);
 	FHandoverChangeState InitialHandoverChanges = Channel->CreateInitialHandoverChangeState(Info);
-	FInitialSnapshotChangeState InitialSnapshotChanges = Channel->CreateInitialSnapshotChangeState(Info);
 
 	// Created just to satisfy the ComponentFactory constructor
 	FUnresolvedObjectsMap UnresolvedObjectsMap;
@@ -238,7 +237,6 @@ TArray<Worker_ComponentData> CreateStartupActorData(USpatialActorChannel* Channe
 
 	// Create component data from initial state of Actor (which is the state the Actor is in before running the level)
 	TArray<Worker_ComponentData> ComponentData = DataFactory.CreateComponentDatas(Actor, InitialRepChanges, InitialHandoverChanges);
-	//ComponentData.Add(DataFactory.CreateInitialSnapshotComponentData(Actor, InitialSnapshotChanges));
 
 	// Add Actor RPCs to entity
 	for (int RPCType = 0; RPCType < RPC_Count; RPCType++)
@@ -264,11 +262,9 @@ TArray<Worker_ComponentData> CreateStartupActorData(USpatialActorChannel* Channe
 
 		FRepChangeState SubobjectRepChanges = Channel->CreateInitialRepChangeState(Subobject);
 		FHandoverChangeState SubobjectHandoverChanges = Channel->CreateInitialHandoverChangeState(ComponentInfo);
-		FInitialSnapshotChangeState SubobjectInitialSnapshotChanges = Channel->CreateInitialSnapshotChangeState(ComponentInfo);
 
 		// Create component data for initial state of subobject
 		ComponentData.Append(DataFactory.CreateComponentDatas(Subobject, SubobjectRepChanges, SubobjectHandoverChanges));
-		//ComponentData.Add(DataFactory.CreateInitialSnapshotComponentData(Subobject, SubobjectInitialSnapshotChanges));
 
 		// Add subobject RPCs to entity
 		for (int RPCType = 0; RPCType < RPC_Count; RPCType++)
@@ -297,7 +293,6 @@ bool CreateStartupActor(Worker_SnapshotOutputStream* OutputStream, AActor* Actor
 	ComponentWriteAcl.Add(ActorInfo->SingleClientComponent, UnrealServerPermission);
 	ComponentWriteAcl.Add(ActorInfo->MultiClientComponent, UnrealServerPermission);
 	ComponentWriteAcl.Add(ActorInfo->HandoverComponent, UnrealServerPermission);
-	//ComponentWriteAcl.Add(ActorInfo->InitialSnapshotComponent, UnrealServerPermission);  // TODO: nobody has write permission
 	// No write attribute for RPC_Client since a Startup Actor will have no owner on level start
 	ComponentWriteAcl.Add(ActorInfo->RPCComponents[RPC_Server], UnrealServerPermission);
 	ComponentWriteAcl.Add(ActorInfo->RPCComponents[RPC_CrossServer], UnrealServerPermission);
@@ -311,7 +306,6 @@ bool CreateStartupActor(Worker_SnapshotOutputStream* OutputStream, AActor* Actor
 		ComponentWriteAcl.Add(SubobjectInfo->SingleClientComponent, UnrealServerPermission);
 		ComponentWriteAcl.Add(SubobjectInfo->MultiClientComponent, UnrealServerPermission);
 		ComponentWriteAcl.Add(SubobjectInfo->HandoverComponent, UnrealServerPermission);
-		//ComponentWriteAcl.Add(SubobjectInfo->InitialSnapshotComponent, UnrealServerPermission);  // TODO: nobody has write permission
 		// No write attribute for RPC_Client since a Startup Actor will have no owner on level start
 		ComponentWriteAcl.Add(SubobjectInfo->RPCComponents[RPC_Server], UnrealServerPermission);
 		ComponentWriteAcl.Add(SubobjectInfo->RPCComponents[RPC_CrossServer], UnrealServerPermission);
@@ -320,11 +314,6 @@ bool CreateStartupActor(Worker_SnapshotOutputStream* OutputStream, AActor* Actor
 
 	USpatialActorChannel* Channel = Cast<USpatialActorChannel>(NetConnection->CreateChannel(CHTYPE_Actor, 1));
 
-	//FString StaticPath;
-	//if (/*Actor->IsFullNameStableForNetworking() && */ Actor->bNetLoadOnClient)
-	//{
-	//	StaticPath = Actor->GetPathName(nullptr);
-	//}
 	FString StaticPath = Actor->GetPathName(nullptr);
 
 	TArray<Worker_ComponentData> Components;

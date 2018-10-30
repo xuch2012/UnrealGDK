@@ -48,11 +48,6 @@ FString SchemaHandoverDataName(UStruct* Type, bool bPrependNamespace /*= false*/
 	return FString::Printf(TEXT("%s%sHandoverData"), bPrependNamespace ? *GetNamespace(Type) : TEXT(""), *UnrealNameToSchemaTypeName(Type->GetName()));
 }
 
-FString SchemaInitialSnapshotDataName(UStruct* Type, bool bPrependNamespace /*= false*/)
-{
-	return FString::Printf(TEXT("%s%sInitialSnapshotData"), bPrependNamespace ? *GetNamespace(Type) : TEXT(""), *UnrealNameToSchemaTypeName(Type->GetName()));
-}
-
 FString SchemaRPCComponentName(ERPCType RpcType, UStruct* Type, bool bPrependNamespace /*= false*/)
 {
 	return FString::Printf(TEXT("%s%s%sRPCs"), bPrependNamespace ? *GetNamespace(Type) : TEXT(""), *UnrealNameToSchemaTypeName(Type->GetName()), *GetRPCTypeName(RpcType));

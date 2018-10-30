@@ -23,8 +23,6 @@ FString SchemaReplicatedDataName(EReplicatedPropertyGroup Group, UStruct* Type, 
 // For example: UnrealCharacterHandoverData
 FString SchemaHandoverDataName(UStruct* Type, bool bPrependNamespace = false);
 
-FString SchemaInitialSnapshotDataName(UStruct* Type, bool bPrependNamespace = false);
-
 // Given an RPC type and Unreal type, generates the name of the corresponding RPC container component.
 // For example: UnrealCharacterClientRPCs
 FString SchemaRPCComponentName(ERPCType RpcType, UStruct* Type, bool bPrependNamespace = false);

@@ -33,8 +33,6 @@ public:
 
 	static Worker_ComponentData CreateEmptyComponentData(Worker_ComponentId ComponentId);
 
-	Worker_ComponentData CreateInitialSnapshotComponentData(UObject* Object, const FInitialSnapshotChangeState& Changes);
-
 private:
 	Worker_ComponentData CreateComponentData(Worker_ComponentId ComponentId, UObject* Object, const FRepChangeState& Changes, EReplicatedPropertyGroup PropertyGroup);
 	Worker_ComponentUpdate CreateComponentUpdate(Worker_ComponentId ComponentId, UObject* Object, const FRepChangeState& Changes, EReplicatedPropertyGroup PropertyGroup, bool& bWroteSomething);
@@ -45,8 +43,6 @@ private:
 	Worker_ComponentUpdate CreateHandoverComponentUpdate(Worker_ComponentId ComponentId, UObject* Object, const FHandoverChangeState& Changes, bool& bWroteSomething);
 
 	bool FillHandoverSchemaObject(Schema_Object* ComponentObject, UObject* Object, const FHandoverChangeState& Changes, bool bIsInitialData, TArray<Schema_FieldId>* ClearedIds = nullptr);
-
-	bool FillInitialSnapshotSchemaObject(Schema_Object* ComponentObject, UObject* Object, const FInitialSnapshotChangeState& Changes, bool bIsInitialData, TArray<Schema_FieldId>* ClearedIds = nullptr);
 
 	void AddProperty(Schema_Object* Object, Schema_FieldId FieldId, UProperty* Property, const uint8* Data, TSet<const UObject*>& UnresolvedObjects, TArray<Schema_FieldId>* ClearedIds);
 

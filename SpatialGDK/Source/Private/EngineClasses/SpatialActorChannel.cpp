@@ -193,18 +193,6 @@ FHandoverChangeState USpatialActorChannel::CreateInitialHandoverChangeState(FCla
 	return HandoverChanged;
 }
 
-FInitialSnapshotChangeState USpatialActorChannel::CreateInitialSnapshotChangeState(FClassInfo* ClassInfo)
-{
-	FInitialSnapshotChangeState InitialSnapshotChanged;
-	for (const FInitialSnapshotPropertyInfo& PropertyInfo : ClassInfo->InitialSnapshotProperties)
-	{
-		// TODO: Check if the value has actually changed
-		InitialSnapshotChanged.Add(PropertyInfo.Handle);
-	}
-
-	return InitialSnapshotChanged;
-}
-
 int64 USpatialActorChannel::ReplicateActor()
 {
 	if (!IsReadyForReplication())

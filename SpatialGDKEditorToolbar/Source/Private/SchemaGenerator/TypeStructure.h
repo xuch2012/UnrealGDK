@@ -212,8 +212,6 @@ FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo);
 // This function will traverse into subobject properties.
 FCmdHandlePropertyMap GetFlatHandoverData(TSharedPtr<FUnrealType> TypeInfo);
 
-FCmdHandlePropertyMap GetFlatInitialSnapshotData(TSharedPtr<FUnrealType> TypeInfo);
-
 // Traverses an AST fully (including subobjects) and generates a list of all RPCs which would be routed through an actor channel
 // of the Unreal class represented by TypeInfo.
 //

@@ -19,9 +19,6 @@ struct FSchemaData
 	int32 HandoverData;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int32 InitialComponentData;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 ClientRPCs;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)

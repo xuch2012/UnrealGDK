@@ -96,20 +96,6 @@ void USpatialTypebindingManager::CreateTypebindings()
 					Info.HandoverProperties.Add(HandoverInfo);
 				}
 			}
-			// TODO: make sure it's not also replicated?
-			else if (Property->PropertyFlags & CPF_InstancedReference)
-			{
-				for (int32 ArrayIdx = 0; ArrayIdx < PropertyIt->ArrayDim; ++ArrayIdx)
-				{
-					FInitialSnapshotPropertyInfo PropertyInfo;
-					PropertyInfo.Handle = Info.InitialSnapshotProperties.Num() + 1; // 1-based index
-					PropertyInfo.Offset = Property->GetOffset_ForGC() + Property->ElementSize * ArrayIdx;
-					PropertyInfo.ArrayIdx = ArrayIdx;
-					PropertyInfo.Property = Property;
-
-					Info.InitialSnapshotProperties.Add(PropertyInfo);
-				}
-			}
 		}
 		
 		Info.SingleClientComponent = SchemaDatabase->ClassToSchema[Class].SingleClientRepData;
@@ -120,9 +106,6 @@ void USpatialTypebindingManager::CreateTypebindings()
 
 		Info.HandoverComponent = SchemaDatabase->ClassToSchema[Class].HandoverData;
 		ComponentToClassMap.Add(Info.HandoverComponent, Class);
-
-		Info.InitialSnapshotComponent = SchemaDatabase->ClassToSchema[Class].InitialComponentData;
-		ComponentToClassMap.Add(Info.InitialSnapshotComponent, Class);
 
 		Info.RPCComponents[RPC_Client] = SchemaDatabase->ClassToSchema[Class].ClientRPCs;
 		ComponentToClassMap.Add(Info.RPCComponents[RPC_Client], Class);
