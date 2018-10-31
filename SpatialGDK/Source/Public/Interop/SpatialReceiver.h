@@ -131,9 +131,8 @@ private:
 	// These functions are only called for client and server workers who did not spawn the Actor.
 	AActor* CreateActor(improbable::Position* Position, struct improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred);
 	AActor* CreateActor(improbable::Position* Position, struct improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, FName ActorName);
-	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId, USceneComponent*& OutNewAttachParent);
 
-	UClass* GetNativeEntityClass(improbable::Metadata* Metadata);
+	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId, USceneComponent*& OutNewAttachParent);
 
 	void HandleActorAuthority(Worker_AuthorityChangeOp& Op);
 
@@ -153,8 +152,6 @@ private:
 	void ResolveIncomingOperations(UObject* Object, const FUnrealObjectRef& ObjectRef);
 	void ResolveIncomingRPCs(UObject* Object, const FUnrealObjectRef& ObjectRef);
 	void ResolveObjectReferences(FRepLayout& RepLayout, UObject* ReplicatedObject, FObjectReferencesMap& ObjectReferencesMap, uint8* RESTRICT StoredData, uint8* RESTRICT Data, int32 MaxAbsOffset, TArray<UProperty*>& RepNotifies, bool& bOutSomeObjectsWereMapped, bool& bOutStillHasUnresolved);
-
-	UObject* GetTargetObjectFromChannelAndClass(USpatialActorChannel* Channel, UClass* Class);
 
 	USpatialActorChannel* PopPendingActorRequest(Worker_RequestId RequestId);
 

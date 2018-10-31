@@ -2,13 +2,15 @@
 
 #include "Interop/GlobalStateManager.h"
 
+#include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
+
 #include "EngineClasses/SpatialNetDriver.h"
 #include "EngineClasses/SpatialActorChannel.h"
 #include "EngineClasses/SpatialNetConnection.h"
 #include "EngineClasses/SpatialPackageMapClient.h"
 #include "Interop/Connection/SpatialWorkerConnection.h"
 #include "Interop/SpatialSender.h"
-#include "Kismet/GameplayStatics.h"
 #include "Schema/UnrealMetadata.h"
 #include "SpatialConstants.h"
 #include "Utils/EntityRegistry.h"
@@ -77,7 +79,11 @@ void UGlobalStateManager::LinkExistingSingletonActors()
 		Channel->SetChannelActor(SingletonActor);
 
 		// Since the entity already exists, we have to handle setting up the PackageMap properly for this Actor
-		NetDriver->PackageMap->ResolveEntityActor(SingletonActor, SingletonEntityId, improbable::CreateOffsetMapFromActor(SingletonActor));
+		FClassInfo* Info = NetDriver->TypebindingManager->FindClassInfoByClass(SingletonActor->GetClass());
+		check(Info);
+
+		NetDriver->PackageMap->ResolveEntityActor(SingletonActor, SingletonEntityId, improbable::CreateOffsetMapFromActor(SingletonActor, Info));
+
 		UE_LOG(LogGlobalStateManager, Log, TEXT("Linked Singleton Actor %s with id %d"), *SingletonActor->GetClass()->GetName(), SingletonEntityId);
 	}
 }

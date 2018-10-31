@@ -3,8 +3,10 @@
 
 #include "Utils/ComponentReader.h"
 
+#include "Engine/BlueprintGeneratedClass.h"
 #include "Net/DataReplication.h"
 #include "Net/RepLayout.h"
+#include "UObject/TextProperty.h"
 
 #include "EngineClasses/SpatialNetBitReader.h"
 #include "Interop/SpatialConditionMapFilter.h"
