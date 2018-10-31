@@ -410,7 +410,7 @@ public:
 		return NewActor;
 	}
 
-	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId, USceneComponent*& OutNewAttachParent)
+	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
 	{
 		StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *StablePath));
 		if (StaticActor == nullptr)
@@ -427,8 +427,8 @@ public:
 		}
 
 		// Copy over property values from the template actor into the new one.
-		FString ActorNameForLogging = FString::Printf(TEXT("%s (entity %lld)"), *NewActor->GetFullName(), EntityId);
-		CopyAllObjectProperties(NewActor, StaticActor, ActorNameForLogging, OutNewAttachParent);
+		//FString ActorNameForLogging = FString::Printf(TEXT("%s (entity %lld)"), *NewActor->GetFullName(), EntityId);
+		//CopyAllObjectProperties(NewActor, StaticActor, ActorNameForLogging, OutNewAttachParent);
 		//CopyAllComponentProperties(NewActor, StaticActor, ActorNameForLogging, OutNewAttachParent);
 
 		// Initialize components after copying over their data from the map.
@@ -472,9 +472,6 @@ public:
 		UNetConnection* Connection = nullptr;
 		bool bDoingDeferredSpawn = false;
 
-		// Populated when setting component values, used to inform the parent that it has a new child.
-		USceneComponent* NewAttachParent = nullptr;
-
 		// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
 		if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
 		{
@@ -496,7 +493,7 @@ public:
 			{
 				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
 				// Note that this can fail and return a null actor.
-				EntityActor = CreateNewStablyNamedActor(*UnrealMetadataComponent->StaticPath, Position, Rotation, ActorClass, EntityId, NewAttachParent);
+				EntityActor = CreateNewStablyNamedActor(*UnrealMetadataComponent->StaticPath, Position, Rotation, ActorClass, EntityId);
 			}
 
 			if (EntityActor == nullptr)
@@ -553,29 +550,32 @@ public:
 			EntityActor->FinishSpawning(FTransform(SpawnRotation, SpawnLocation));
 		}
 
-		// Copy component properties over from the static actor, if we're spawning from one.
-		// NOTE: we do this after FinishSpawning because components that exist only in blueprints won't be added until then.
 		if (StaticActor)
 		{
+			// Populated when setting component values, used to inform the parent that it has a new child.
+			USceneComponent* NewAttachParent = nullptr;
+
+			// Copy component properties over from the static actor, if we're spawning from one.
+			// NOTE: we do this after FinishSpawning because components that exist only in blueprints won't be added until then.
 			FString ActorNameForLogging = FString::Printf(TEXT("%s (entity %lld)"), *EntityActor->GetFullName(), EntityId);
+			CopyAllObjectProperties(EntityActor, StaticActor, ActorNameForLogging, NewAttachParent);
 			CopyAllComponentProperties(EntityActor, StaticActor, ActorNameForLogging, NewAttachParent);
 
 			// Update the final transform for this actor to account for any differences in the static actor's scale.
 			// TODO: scale should probably be spatially-replicated in case it changes
-			if (USceneComponent* RootComponent = EntityActor->GetRootComponent())
-			{
-				StaticActor->UpdateComponentTransforms();
-				EntityActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
-				EntityActor->UpdateComponentTransforms();
-			}
-		}
+			StaticActor->UpdateComponentTransforms();
+			EntityActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
 
-		// TODO: probably need to do this after applying SpatialOS component data too.
-		if (NewAttachParent)
-		{
-			NewAttachParent->ConditionalUpdateComponentToWorld();
-			EntityActor->SetActorTransform(NewAttachParent->GetComponentTransform());
-			EntityActor->AttachToComponent(NewAttachParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+			// TODO: probably need to do this after applying SpatialOS component data too.
+			if (NewAttachParent)
+			{
+				NewAttachParent->ConditionalUpdateComponentToWorld();
+				EntityActor->SetActorTransform(NewAttachParent->GetComponentTransform());
+				EntityActor->AttachToComponent(NewAttachParent, FAttachmentTransformRules::SnapToTargetIncludingScale);
+			}
+
+			// After all of the above, make sure the transforms within the actor are up to date.
+			EntityActor->UpdateComponentTransforms();
 		}
 
 		FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
