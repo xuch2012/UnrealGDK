@@ -11,7 +11,7 @@
 class FSpatialConditionMapFilter
 {
 public:
-	FSpatialConditionMapFilter(USpatialActorChannel* ActorChannel, bool bAuthoritative)
+	FSpatialConditionMapFilter(USpatialActorChannel* ActorChannel, bool bAuthoritative, bool bIsServer)
 	{
 		// Reconstruct replication flags on the client side.
 		FReplicationFlags RepFlags;
@@ -31,7 +31,7 @@ public:
 #endif
 
 		// Build a ConditionMap. This code is taken directly from FRepLayout::RebuildConditionalProperties
-		static_assert(COND_Max == 14, "We are expecting 14 rep conditions"); // Guard in case more are added.
+		static_assert(COND_Max == 15, "We are expecting 15 rep conditions"); // Guard in case more are added.
 		const bool bIsInitial = RepFlags.bNetInitial ? true : false;
 		const bool bIsOwner = RepFlags.bNetOwner ? true : false;
 		const bool bIsSimulated = RepFlags.bNetSimulated ? true : false;
@@ -52,6 +52,7 @@ public:
 		ConditionMap[COND_ReplayOnly] = bIsReplay;
 		ConditionMap[COND_SkipReplay] = !bIsReplay;
 		ConditionMap[COND_Custom] = true;
+		ConditionMap[COND_ServerOnly] = bIsServer;
 	}
 
 	bool IsRelevant(ELifetimeCondition Condition) const

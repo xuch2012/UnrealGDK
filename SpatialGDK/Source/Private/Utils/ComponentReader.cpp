@@ -84,9 +84,10 @@ void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject*
 	TArray<FHandleToCmdIndex>& BaseHandleToCmdIndex = Replicator.RepLayout->BaseHandleToCmdIndex;
 	TArray<FRepParentCmd>& Parents = Replicator.RepLayout->Parents;
 
+	bool bIsServer = NetDriver->IsServer();
 	bool bIsAuthServer = Channel->IsAuthoritativeServer();
 
-	FSpatialConditionMapFilter ConditionMap(Channel, bAutonomousProxy);
+	FSpatialConditionMapFilter ConditionMap(Channel, bAutonomousProxy, bIsServer);
 
 	TArray<UProperty*> RepNotifies;
 
@@ -97,7 +98,7 @@ void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject*
 		const FRepLayoutCmd& Cmd = Cmds[BaseHandleToCmdIndex[FieldId - 1].CmdIndex];
 		const FRepParentCmd& Parent = Parents[Cmd.ParentIndex];
 
-		if (NetDriver->IsServer() || ConditionMap.IsRelevant(Parent.Condition))
+		if (bIsServer || ConditionMap.IsRelevant(Parent.Condition))
 		{
 			// This swaps Role/RemoteRole as we write it
 			const FRepLayoutCmd& SwappedCmd = (!bIsAuthServer && Parent.RoleSwapIndex != -1) ? Cmds[Parents[Parent.RoleSwapIndex].CmdStart] : Cmd;

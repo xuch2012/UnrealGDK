@@ -519,7 +519,7 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 
 	ESchemaComponentType ComponentType = TypebindingManager->FindCategoryByComponentId(Data.component_id);
 
-	if (ComponentType == SCHEMA_Data || ComponentType == SCHEMA_OwnerOnly)
+	if (ComponentType >= SCHEMA_FirstRep && ComponentType <= SCHEMA_LastRep)
 	{
 		FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
 		TSet<FUnrealObjectRef> UnresolvedRefs;
@@ -615,11 +615,11 @@ void USpatialReceiver::OnComponentUpdate(Worker_ComponentUpdateOp& Op)
 
 	ESchemaComponentType Category = TypebindingManager->FindCategoryByComponentId(Op.update.component_id);
 
-	if (Category == ESchemaComponentType::SCHEMA_Data || Category == ESchemaComponentType::SCHEMA_OwnerOnly)
+	if (Category >= SCHEMA_FirstRep && Category <= SCHEMA_LastRep)
 	{
 		ApplyComponentUpdate(Op.update, TargetObject, Channel, /* bIsHandover */ false);
 	}
-	else if (Category == ESchemaComponentType::SCHEMA_Handover)
+	else if (Category == SCHEMA_Handover)
 	{
 		if (!NetDriver->IsServer())
 		{
@@ -629,7 +629,7 @@ void USpatialReceiver::OnComponentUpdate(Worker_ComponentUpdateOp& Op)
 
 		ApplyComponentUpdate(Op.update, TargetObject, Channel, /* bIsHandover */ true);
 	}
-	else if (Category == ESchemaComponentType::SCHEMA_NetMulticastRPC)
+	else if (Category == SCHEMA_NetMulticastRPC)
 	{
 		if (TArray<UFunction*>* RPCArray = Info->RPCs.Find(SCHEMA_NetMulticastRPC))
 		{

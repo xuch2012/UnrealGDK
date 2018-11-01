@@ -19,6 +19,7 @@ enum ESchemaComponentType : int32
 	// Properties
 	SCHEMA_Data, // Represents properties being replicated to all workers
 	SCHEMA_OwnerOnly,
+	SCHEMA_ServerOnly,
 	SCHEMA_Handover,
 
 	// RPCs
@@ -31,6 +32,8 @@ enum ESchemaComponentType : int32
 
 	// Iteration helpers
 	SCHEMA_Begin = SCHEMA_Data,
+	SCHEMA_FirstRep = SCHEMA_Data, // Replicated properties (excluding handover)
+	SCHEMA_LastRep = SCHEMA_ServerOnly,
 	SCHEMA_FirstRPC = SCHEMA_ClientRPC,
 	SCHEMA_LastRPC = SCHEMA_CrossServerRPC,
 };

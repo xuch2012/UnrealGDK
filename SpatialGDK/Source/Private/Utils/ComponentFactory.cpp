@@ -273,14 +273,12 @@ TArray<Worker_ComponentData> ComponentFactory::CreateComponentDatas(UObject* Obj
 {
 	TArray<Worker_ComponentData> ComponentDatas;
 
-	if (Info->SchemaComponents[SCHEMA_Data] != SpatialConstants::INVALID_COMPONENT_ID)
+	for (int32 PropertyGroup = SCHEMA_FirstRep; PropertyGroup <= SCHEMA_LastRep; PropertyGroup++)
 	{
-		ComponentDatas.Add(CreateComponentData(Info->SchemaComponents[SCHEMA_Data], Object, RepChangeState, SCHEMA_Data));
-	}
-
-	if (Info->SchemaComponents[SCHEMA_OwnerOnly] != SpatialConstants::INVALID_COMPONENT_ID)
-	{
-		ComponentDatas.Add(CreateComponentData(Info->SchemaComponents[SCHEMA_OwnerOnly], Object, RepChangeState, SCHEMA_OwnerOnly));
+		if (Info->SchemaComponents[PropertyGroup] != SpatialConstants::INVALID_COMPONENT_ID)
+		{
+			ComponentDatas.Add(CreateComponentData(Info->SchemaComponents[PropertyGroup], Object, RepChangeState, ESchemaComponentType(PropertyGroup)));
+		}
 	}
 
 	if (Info->SchemaComponents[SCHEMA_Handover] != SpatialConstants::INVALID_COMPONENT_ID)
@@ -328,23 +326,16 @@ TArray<Worker_ComponentUpdate> ComponentFactory::CreateComponentUpdates(UObject*
 
 	if (RepChangeState)
 	{
-		if (Info->SchemaComponents[SCHEMA_Data] != SpatialConstants::INVALID_COMPONENT_ID)
+		for (int32 PropertyGroup = SCHEMA_FirstRep; PropertyGroup <= SCHEMA_LastRep; PropertyGroup++)
 		{
-			bool bWroteSomething = false;
-			Worker_ComponentUpdate MultiClientUpdate = CreateComponentUpdate(Info->SchemaComponents[SCHEMA_Data], Object, *RepChangeState, SCHEMA_Data, bWroteSomething);
-			if (bWroteSomething)
+			if (Info->SchemaComponents[PropertyGroup] != SpatialConstants::INVALID_COMPONENT_ID)
 			{
-				ComponentUpdates.Add(MultiClientUpdate);
-			}
-		}
-
-		if (Info->SchemaComponents[SCHEMA_OwnerOnly] != SpatialConstants::INVALID_COMPONENT_ID)
-		{
-			bool bWroteSomething = false;
-			Worker_ComponentUpdate SingleClientUpdate = CreateComponentUpdate(Info->SchemaComponents[SCHEMA_OwnerOnly], Object, *RepChangeState, SCHEMA_OwnerOnly, bWroteSomething);
-			if (bWroteSomething)
-			{
-				ComponentUpdates.Add(SingleClientUpdate);
+				bool bWroteSomething = false;
+				Worker_ComponentUpdate Update = CreateComponentUpdate(Info->SchemaComponents[PropertyGroup], Object, *RepChangeState, ESchemaComponentType(PropertyGroup), bWroteSomething);
+				if (bWroteSomething)
+				{
+					ComponentUpdates.Add(Update);
+				}
 			}
 		}
 	}

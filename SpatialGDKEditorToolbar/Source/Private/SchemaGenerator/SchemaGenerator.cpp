@@ -13,16 +13,15 @@
 
 ESchemaComponentType PropertyGroupToSchemaComponentType(EReplicatedPropertyGroup Group)
 {
-	if (Group == REP_MultiClient)
+	switch (Group)
 	{
+	case REP_MultiClient:
 		return SCHEMA_Data;
-	}
-	else if (Group == REP_SingleClient)
-	{
+	case REP_SingleClient:
 		return SCHEMA_OwnerOnly;
-	}
-	else
-	{
+	case REP_ServerOnly:
+		return SCHEMA_ServerOnly;
+	default:
 		checkNoEntry();
 		return SCHEMA_Invalid;
 	}
@@ -30,28 +29,20 @@ ESchemaComponentType PropertyGroupToSchemaComponentType(EReplicatedPropertyGroup
 
 ESchemaComponentType RPCTypeToSchemaComponentType(ERPCType RPC)
 {
-	if (RPC == RPC_Client)
+	switch (RPC)
 	{
+	case RPC_Client:
 		return SCHEMA_ClientRPC;
-	}
-	else if (RPC == RPC_Server)
-	{
+	case RPC_Server:
 		return SCHEMA_ServerRPC;
-	}
-	else if (RPC == RPC_NetMulticast)
-	{
+	case RPC_NetMulticast:
 		return SCHEMA_NetMulticastRPC;
-	}
-	else if (RPC == RPC_CrossServer)
-	{
+	case RPC_CrossServer:
 		return SCHEMA_CrossServerRPC;
-	}
-	else
-	{
+	default:
 		checkNoEntry();
 		return SCHEMA_Invalid;
 	}
-
 }
 
 // Given a RepLayout cmd type (a data type supported by the replication system). Generates the corresponding

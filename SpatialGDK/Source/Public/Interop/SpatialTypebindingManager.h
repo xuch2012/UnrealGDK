@@ -24,6 +24,8 @@ FORCEINLINE ESchemaComponentType GetGroupFromCondition(ELifetimeCondition Condit
 	case COND_AutonomousOnly:
 	case COND_OwnerOnly:
 		return SCHEMA_OwnerOnly;
+	case COND_ServerOnly:
+		return SCHEMA_ServerOnly;
 	default:
 		return SCHEMA_Data;
 	}

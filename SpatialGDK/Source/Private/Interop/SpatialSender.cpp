@@ -271,6 +271,12 @@ void FillComponentInterests(FClassInfo* Info, bool bNetOwned, TArray<Worker_Inte
 		ComponentInterest.Add(SingleClientInterest);
 	}
 
+	if (Info->SchemaComponents[SCHEMA_ServerOnly] != SpatialConstants::INVALID_COMPONENT_ID)
+	{
+		Worker_InterestOverride ServerOnlyInterest = { Info->SchemaComponents[SCHEMA_ServerOnly], false };
+		ComponentInterest.Add(ServerOnlyInterest);
+	}
+
 	if (Info->SchemaComponents[SCHEMA_Handover] != SpatialConstants::INVALID_COMPONENT_ID)
 	{
 		Worker_InterestOverride HandoverInterest = { Info->SchemaComponents[SCHEMA_Handover], false };

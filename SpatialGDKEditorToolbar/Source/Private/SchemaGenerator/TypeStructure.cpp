@@ -48,13 +48,24 @@ FString GetRepNotifyLifetimeConditionAsString(ELifetimeRepNotifyCondition Condit
 
 TArray<EReplicatedPropertyGroup> GetAllReplicatedPropertyGroups()
 {
-	static TArray<EReplicatedPropertyGroup> Groups = {REP_MultiClient, REP_SingleClient};
+	static TArray<EReplicatedPropertyGroup> Groups = {REP_MultiClient, REP_SingleClient, REP_ServerOnly};
 	return Groups;
 }
 
 FString GetReplicatedPropertyGroupName(EReplicatedPropertyGroup Group)
 {
-	return Group == REP_SingleClient ? TEXT("OwnerOnly") : TEXT("");
+	switch (Group)
+	{
+	case REP_MultiClient:
+		return TEXT("");
+	case REP_SingleClient:
+		return TEXT("OwnerOnly");
+	case REP_ServerOnly:
+		return TEXT("ServerOnly");
+	default:
+		checkNoEntry();
+		return TEXT("");
+	}
 }
 
 TArray<ERPCType> GetRPCTypes()
@@ -520,6 +531,7 @@ FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo)
 	FUnrealFlatRepData RepData;
 	RepData.Add(REP_MultiClient);
 	RepData.Add(REP_SingleClient);
+	RepData.Add(REP_ServerOnly);
 
 	VisitAllProperties(TypeInfo, [&RepData](TSharedPtr<FUnrealProperty> PropertyInfo)
 	{
@@ -532,6 +544,8 @@ FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo)
 			case COND_OwnerOnly:
 				Group = REP_SingleClient;
 				break;
+			case COND_ServerOnly:
+				Group = REP_ServerOnly;
 			}
 			RepData[Group].Add(PropertyInfo->ReplicationData->Handle, PropertyInfo);
 		}
@@ -544,6 +558,10 @@ FUnrealFlatRepData GetFlatRepData(TSharedPtr<FUnrealType> TypeInfo)
 		return A < B;
 	});
 	RepData[REP_SingleClient].KeySort([](uint16 A, uint16 B)
+	{
+		return A < B;
+	});
+	RepData[REP_ServerOnly].KeySort([](uint16 A, uint16 B)
 	{
 		return A < B;
 	});
