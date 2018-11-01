@@ -137,12 +137,6 @@ private:
 	void ReceiveActor(Worker_EntityId EntityId);
 	void RemoveActor(Worker_EntityId EntityId);
 
-	// These functions are only called for client and server workers who did not spawn the Actor.
-	AActor* CreateActor(improbable::Position* Position, struct improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred);
-	AActor* CreateActor(improbable::Position* Position, struct improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, FName ActorName);
-
-	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId, USceneComponent*& OutNewAttachParent);
-
 	void HandleActorAuthority(Worker_AuthorityChangeOp& Op);
 
 	void ApplyComponentData(Worker_EntityId EntityId, Worker_ComponentData& Data, USpatialActorChannel* Channel);

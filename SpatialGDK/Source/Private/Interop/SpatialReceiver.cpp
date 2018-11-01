@@ -308,7 +308,6 @@ public:
 							UChildActorComponent* ChildActorComponent = Cast<UChildActorComponent>(RefTarget);
 							OutNewAttachParent = ChildActorComponent;
 							UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s assigning myself as a child to object %s because of property %s"),
-
 								*ActorNameForLogging,
 								RefTarget ? *RefTarget->GetFullName() : TEXT("nullptr"),
 								*ObjectProperty->GetName());
@@ -324,6 +323,7 @@ public:
 					}
 					else
 					{
+						// TODO: add to unresolved object queue (possible for streaming levels)
 						UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s failed to resolve object reference %s for property %s"),
 							*ActorNameForLogging,
 							*RefPath,
