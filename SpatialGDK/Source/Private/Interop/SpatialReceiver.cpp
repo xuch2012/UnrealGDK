@@ -564,6 +564,7 @@ public:
 			// Update the final transform for this actor to account for any differences in the static actor's scale.
 			// TODO: scale should probably be spatially-replicated in case it changes
 			StaticActor->UpdateComponentTransforms();
+			EntityActor->UpdateComponentTransforms();
 			EntityActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
 
 			// TODO: probably need to do this after applying SpatialOS component data too.
@@ -576,6 +577,7 @@ public:
 
 			// After all of the above, make sure the transforms within the actor are up to date.
 			EntityActor->UpdateComponentTransforms();
+			EntityActor->UpdateOverlaps();
 		}
 
 		FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
