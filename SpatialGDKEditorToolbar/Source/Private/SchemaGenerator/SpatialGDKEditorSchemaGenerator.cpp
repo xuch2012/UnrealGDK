@@ -4,6 +4,7 @@
 
 #include "AssetRegistryModule.h"
 #include "Components/SceneComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Engine/LevelScriptActor.h"
 #include "GeneralProjectSettings.h"
 #include "GenericPlatform/GenericPlatformFile.h"
@@ -176,7 +177,8 @@ TArray<UClass*> GetAllSupportedClasses()
 		// Doesn't let us save the schema database
 		if (SupportedClass->IsChildOf<ALevelScriptActor>()) continue;
 
-		if (SupportedClass->IsChildOf<USceneComponent>()) continue;
+		bool crap = SupportedClass->IsChildOf<UCapsuleComponent>();
+		if (SupportedClass->IsChildOf<USceneComponent>() && !crap) continue;
 
 		// Ensure we don't process skeleton or reinitialized classes
 		if (SupportedClass->GetName().StartsWith(TEXT("SKEL_"), ESearchCase::CaseSensitive)
