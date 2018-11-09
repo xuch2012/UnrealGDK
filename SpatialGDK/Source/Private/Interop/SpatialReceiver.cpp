@@ -566,6 +566,9 @@ public:
 			CopyAllObjectProperties(EntityActor, StaticActor, ActorNameForLogging, NewAttachParent);
 			CopyAllComponentProperties(EntityActor, StaticActor, ActorNameForLogging, NewAttachParent);
 
+			// Mark all components as dirty so any rendering-related changes (e.g. material references) made during the property copy get reflected.
+			EntityActor->MarkComponentsRenderStateDirty();
+
 			// Update the final transform for this actor to account for any differences in the static actor's scale.
 			// TODO: scale should probably be spatially-replicated in case it changes
 			StaticActor->UpdateComponentTransforms();
