@@ -455,12 +455,12 @@ public:
 	bool CreateActorForEntity()
 	{
 		improbable::Position* Position = StaticComponentView->GetComponentData<improbable::Position>(EntityId);
-		improbable::Metadata* Metadata = StaticComponentView->GetComponentData<improbable::Metadata>(EntityId);
 		improbable::Rotation* Rotation = StaticComponentView->GetComponentData<improbable::Rotation>(EntityId);
+		improbable::UnrealMetadata* UnrealMetadataComponent = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
 
-		check(Position && Metadata);
+		check(Position && UnrealMetadataComponent);
 
-		UClass* ActorClass = Metadata->GetNativeEntityClass();
+		UClass* ActorClass = UnrealMetadataComponent->GetNativeEntityClass();
 
 		if (ActorClass == nullptr)
 		{
@@ -473,9 +473,6 @@ public:
 		{
 			return false;
 		}
-
-		improbable::UnrealMetadata* UnrealMetadataComponent = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
-		check(UnrealMetadataComponent);
 
 		UNetConnection* Connection = nullptr;
 		bool bDoingDeferredSpawn = false;
@@ -692,9 +689,10 @@ void USpatialReceiver::RemoveActor(Worker_EntityId EntityId)
 	{
 		if (USpatialActorChannel* ActorChannel = NetDriver->GetActorChannelByEntityId(EntityId))
 		{
+			UE_LOG(LogSpatialReceiver, Warning, TEXT("RemoveActor: actor for entity %lld was already deleted (likely on the authoritative worker) but still has an open actor channel."), EntityId);
 			ActorChannel->ConditionalCleanUp();
+			CleanupDeletedEntity(EntityId);
 		}
-		CleanupDeletedEntity(EntityId);
 		return;
 	}
 
