@@ -51,6 +51,14 @@ void USpatialReceiver::Init(USpatialNetDriver* InNetDriver, FTimerManager* InTim
 	TypebindingManager = InNetDriver->TypebindingManager;
 	GlobalStateManager = InNetDriver->GlobalStateManager;
 	TimerManager = InTimerManager;
+
+	StablyNamedActorManager = NewObject<UStablyNamedActorManager>();
+	StablyNamedActorManager->Init(World);
+	StablyNamedActorManager->OnCreateDeferredStablyNamedActor().BindLambda([this](FDeferredStablyNamedActorData& DeferredStablyNamedActorData)
+	{
+		// TODO: make sure we haven't gotten the remove entity op
+		CreateDeferredStablyNamedActor(DeferredStablyNamedActorData);
+	});
 }
 
 void USpatialReceiver::OnCriticalSection(bool InCriticalSection)
@@ -231,6 +239,72 @@ void USpatialReceiver::HandleActorAuthority(Worker_AuthorityChangeOp& Op)
 	}
 }
 
+void UStablyNamedActorManager::Init(UWorld* World)
+{
+	this->World = World;
+
+	World->OnLevelsChanged().AddLambda([this]()
+	{
+		LevelsChanged();
+	});
+}
+
+void UStablyNamedActorManager::DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData)
+{
+	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG deferring spawning actor %lld for level %s"),
+		DeferredActorData.EntityId, *LevelPath);
+	DeferredStablyNamedActorData.Add(LevelPath, DeferredActorData);
+}
+
+void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
+{
+	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level added: %s"), *LevelName);
+
+	TArray<FDeferredStablyNamedActorData> LevelDeferredActors;
+	DeferredStablyNamedActorData.MultiFind(LevelName, LevelDeferredActors);
+	for (FDeferredStablyNamedActorData& DeferredActor : LevelDeferredActors)
+	{
+		UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG handling deferred stably named actor %lld for level %s"),
+			DeferredActor.EntityId,
+			*LevelName);
+		CreateDeferredStablyNamedActorDelegate.ExecuteIfBound(DeferredActor);
+	}
+	DeferredStablyNamedActorData.Remove(LevelName);
+
+	// TODO: handle snoozed actors
+}
+
+void UStablyNamedActorManager::HandleLevelRemoved(const FString& LevelName)
+{
+	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level removed: %s"), *LevelName);
+}
+
+void UStablyNamedActorManager::LevelsChanged()
+{
+	TSet<FString> NewLoadedLevels;
+	for (ULevel* Level : World->GetLevels())
+	{
+		NewLoadedLevels.Add(Level->GetPathName());
+	}
+
+	TSet<FString> NewlyLoadedLevels = NewLoadedLevels.Difference(LoadedLevels);
+	TSet<FString> NewlyUnloadedLevels = LoadedLevels.Difference(NewLoadedLevels);
+
+	for (const FString& LevelName : NewlyLoadedLevels)
+	{
+		HandleLevelAdded(LevelName);
+	}
+
+	for (const FString& LevelName : NewlyUnloadedLevels)
+	{
+		HandleLevelRemoved(LevelName);
+	}
+
+	LoadedLevels = NewLoadedLevels;
+}
+
+DECLARE_DELEGATE_OneParam(FAddComponentDataDelegate, improbable::Component*);
+
 namespace {
 class FSpatialActorCreator {
 private:
@@ -242,6 +316,10 @@ private:
 	UEntityRegistry* EntityRegistry;
 	USpatialTypebindingManager* TypebindingManager;
 	USpatialSender* Sender;
+	UStablyNamedActorManager* StablyNamedActorManager;
+
+	FAddComponentDataDelegate AddComponentDataCallback;
+	TArray<TSharedPtr<improbable::Component>> ComponentDatas;
 
 public:
 	AActor* StaticActor = nullptr;
@@ -251,9 +329,11 @@ public:
 public:
 	FSpatialActorCreator(
 		Worker_EntityId EntityId,
-		USpatialNetDriver* NetDriver)
+		USpatialNetDriver* NetDriver,
+		UStablyNamedActorManager* StablyNamedActorManager)
 		: EntityId(EntityId)
 		, NetDriver(NetDriver)
+		, StablyNamedActorManager(StablyNamedActorManager)
 	{
 		World = NetDriver->GetWorld();
 		StaticComponentView = NetDriver->StaticComponentView;
@@ -261,6 +341,10 @@ public:
 		TypebindingManager = NetDriver->TypebindingManager;
 		Sender = NetDriver->Sender;
 	}
+
+	void SetComponentDatas(const TArray<TSharedPtr<improbable::Component>> ComponentDatas) { this->ComponentDatas = ComponentDatas; }
+
+	FAddComponentDataDelegate& AddComponentDataDelegate() { return AddComponentDataCallback; }
 
 	void CopyAllObjectProperties(UObject* DestObject, UObject* SourceObject, const FString& ActorNameForLogging, USceneComponent*& OutNewAttachParent)
 	{
@@ -387,10 +471,10 @@ public:
 
 	AActor* CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred)
 	{
-		return CreateActor(Position, Rotation, ActorClass, bDeferred, NAME_None);
+		return CreateActor(Position, Rotation, ActorClass, bDeferred, NAME_None, nullptr);
 	}
 
-	AActor* CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, FName ActorName)
+	AActor* CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred, FName ActorName, ULevel* Level)
 	{
 		FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
 		FRotator InitialRotation = Rotation->ToFRotator();
@@ -408,6 +492,10 @@ public:
 			{
 				SpawnInfo.Name = ActorName;
 			}
+			if (Level != nullptr)
+			{
+				SpawnInfo.OverrideLevel = Level;
+			}
 
 			FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
 
@@ -420,6 +508,15 @@ public:
 
 	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
 	{
+		if (NetDriver->IsServer())
+		{
+			bool noop = true;
+		}
+		else
+		{
+			bool noop = false;
+		}
+
 		StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *StablePath));
 		if (StaticActor == nullptr)
 		{
@@ -427,7 +524,22 @@ public:
 			return nullptr;
 		}
 
-		AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor->GetFName());
+		FString LevelPath = StaticActor->GetLevel()->GetPathName();
+		GEngine->NetworkRemapPath(NetDriver, LevelPath);
+		ULevel* OuterLevel = Cast<ULevel>(StaticFindObject(ULevel::StaticClass(), nullptr, *LevelPath));
+		if (OuterLevel == nullptr)
+		{
+			UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find level %s in which to spawn entity %lld"), *LevelPath, EntityId);
+
+			FDeferredStablyNamedActorData DeferredStablyNamedActorData;
+			DeferredStablyNamedActorData.EntityId = EntityId;
+			DeferredStablyNamedActorData.ComponentDatas = ComponentDatas;
+
+			StablyNamedActorManager->DeferStablyNamedActorForLevel(LevelPath, DeferredStablyNamedActorData);
+			return nullptr;
+		}
+
+		AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor->GetFName(), OuterLevel);
 		if (NewActor == nullptr)
 		{
 			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new stably-named actor for entity %lld from template %s"), EntityId, *StaticActor->GetFullName());
@@ -499,6 +611,11 @@ public:
 				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
 				// Note that this can fail and return a null actor.
 				EntityActor = CreateNewStablyNamedActor(*UnrealMetadataComponent->StaticPath, Position, Rotation, ActorClass, EntityId);
+				if (EntityActor == nullptr)
+				{
+					// Failed, which means that the streaming level in which the stably named actor should be hasn't been created yet. We'll defer creating this actor for now.
+					return false;
+				}
 			}
 
 			if (EntityActor == nullptr)
@@ -592,6 +709,12 @@ public:
 		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, improbable::CreateOffsetMapFromActor(EntityActor, Info));
 		Channel->SetChannelActor(EntityActor);
 
+		// TODO: move somewhere else?
+		for (TSharedPtr<improbable::Component>& Component : ComponentDatas)
+		{
+			AddComponentDataCallback.ExecuteIfBound(Component.Get());
+		}
+
 		return true;
 	}
 
@@ -630,6 +753,31 @@ public:
 };
 }
 
+void USpatialReceiver::CreateDeferredStablyNamedActor(FDeferredStablyNamedActorData& DeferredStablyNamedActorData)
+{
+	checkf(World, TEXT("We should have a world whilst processing ops."));
+	check(NetDriver);
+
+	Worker_EntityId EntityId = DeferredStablyNamedActorData.EntityId;
+
+	FSpatialActorCreator ActorCreator(EntityId, NetDriver, StablyNamedActorManager);
+	ActorCreator.SetComponentDatas(DeferredStablyNamedActorData.ComponentDatas);
+
+	// TODO: this is really ugly
+	ActorCreator.AddComponentDataDelegate().BindLambda([this, EntityId, &ActorCreator](improbable::Component* Component)
+	{
+		ApplyComponentData(EntityId, *static_cast<improbable::DynamicComponent*>(Component)->Data, ActorCreator.Channel);
+	});
+
+	if (!ActorCreator.CreateActorForEntity())
+	{
+		// Failed, early-outed, or deferred. Error will have already been printed.
+		return;
+	}
+
+	ActorCreator.FinalizeNewActor();
+}
+
 void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 {
 	checkf(World, TEXT("We should have a world whilst processing ops."));
@@ -658,13 +806,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 	}
 	else
 	{
-		FSpatialActorCreator ActorCreator(EntityId, NetDriver);
-
-		if (!ActorCreator.CreateActorForEntity())
-		{
-			// Failed or early-outed. Error will have already been printed.
-			return;
-		}
+		TArray<TSharedPtr<improbable::Component>> ComponentDatas;
 
 		// Apply initial replicated properties.
 		// This was moved to after FinishingSpawning because components existing only in blueprints aren't added until spawning is complete
@@ -673,8 +815,24 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 		{
 			if (PendingAddComponent.EntityId == EntityId && PendingAddComponent.Data.IsValid() && PendingAddComponent.Data->bIsDynamic)
 			{
-				ApplyComponentData(EntityId, *static_cast<improbable::DynamicComponent*>(PendingAddComponent.Data.Get())->Data, ActorCreator.Channel);
+				//ApplyComponentData(EntityId, *static_cast<improbable::DynamicComponent*>(PendingAddComponent.Data.Get())->Data, ActorCreator.Channel);
+				ComponentDatas.Add(PendingAddComponent.Data);
 			}
+		}
+
+		FSpatialActorCreator ActorCreator(EntityId, NetDriver, StablyNamedActorManager);
+		ActorCreator.SetComponentDatas(ComponentDatas);
+
+		// TODO: this is really ugly
+		ActorCreator.AddComponentDataDelegate().BindLambda([this, EntityId, &ActorCreator](improbable::Component* Component)
+		{
+			ApplyComponentData(EntityId, *static_cast<improbable::DynamicComponent*>(Component)->Data, ActorCreator.Channel);
+		});
+
+		if (!ActorCreator.CreateActorForEntity())
+		{
+			// Failed, early-outed, or deferred. Error will have already been printed.
+			return;
 		}
 
 		ActorCreator.FinalizeNewActor();

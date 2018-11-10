@@ -89,6 +89,45 @@ struct FPendingIncomingRPC
 	int64 CountBits;
 };
 
+struct FDeferredStablyNamedActorData {
+	Worker_EntityId EntityId;
+	TArray<TSharedPtr<improbable::Component>> ComponentDatas;
+};
+
+DECLARE_DELEGATE_OneParam(FCreateDeferredStablyNamedActorDelegate, FDeferredStablyNamedActorData&);
+
+UCLASS()
+class UStablyNamedActorManager : public UObject {
+
+	GENERATED_BODY()
+
+public:
+	void Init(UWorld* World);
+
+	void DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData);
+
+	void HandleLevelAdded(const FString& LevelName);
+	void HandleLevelRemoved(const FString& LevelName);
+
+	FCreateDeferredStablyNamedActorDelegate& OnCreateDeferredStablyNamedActor() { return CreateDeferredStablyNamedActorDelegate; }
+
+private:
+	void LevelsChanged();
+
+	TSet<FString> LoadedLevels;
+
+	// Level path -> actor data
+	TMultiMap<FString, FDeferredStablyNamedActorData> DeferredStablyNamedActorData;
+
+	// Level path -> snoozed actors
+	TMultiMap<FString, AActor*> SnoozedActors;
+
+	UPROPERTY()
+	UWorld* World;
+
+	FCreateDeferredStablyNamedActorDelegate CreateDeferredStablyNamedActorDelegate;
+};
+
 using FIncomingRPCArray = TArray<TSharedPtr<FPendingIncomingRPC>>;
 
 DECLARE_DELEGATE_OneParam(EntityQueryDelegate, Worker_EntityQueryResponseOp&);
@@ -134,6 +173,7 @@ private:
 	void EnterCriticalSection();
 	void LeaveCriticalSection();
 
+	void CreateDeferredStablyNamedActor(FDeferredStablyNamedActorData& DeferredStablyNamedActorData);
 	void ReceiveActor(Worker_EntityId EntityId);
 	void RemoveActor(Worker_EntityId EntityId);
 
@@ -161,6 +201,9 @@ private:
 private:
 	template <typename T>
 	friend T* GetComponentData(USpatialReceiver& Receiver, Worker_EntityId EntityId);
+
+	UPROPERTY()
+	UStablyNamedActorManager *StablyNamedActorManager;
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;
