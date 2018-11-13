@@ -241,6 +241,11 @@ void USpatialReceiver::HandleActorAuthority(Worker_AuthorityChangeOp& Op)
 	}
 }
 
+void ULevelWillBeRemovedWrapper::ExecuteIfBound()
+{
+	OnLevelWillBeRemoved.ExecuteIfBound(LevelName);
+}
+
 void UStablyNamedActorManager::Init(USpatialNetDriver* NetDriver)
 {
 	this->NetDriver = NetDriver;
@@ -252,8 +257,9 @@ void UStablyNamedActorManager::Init(USpatialNetDriver* NetDriver)
 	});
 }
 
-void UStablyNamedActorManager::RegisterStablyNamedActorForLevel(const FString& LevelPath, AActor* Actor)
+void UStablyNamedActorManager::RegisterStablyNamedActorForLevel(ULevel* Level, AActor* Actor)
 {
+	const FString LevelPath = Level->GetOutermost()->GetPathName();
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG registered actor %s for level %s"), *Actor->GetName(), *LevelPath);
 	ActiveActors.Add(LevelPath, Actor);
 }
@@ -269,12 +275,23 @@ void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
 {
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level added: %s"), *LevelName);
 
-	if (ULevelStreaming* LevelStreaming = World->GetLevelStreamingForPackageName(FName(*LevelName)))
+	FName LevelFName(*LevelName);
+	if (ULevelStreaming* LevelStreaming = World->GetLevelStreamingForPackageName(LevelFName))
 	{
-		LevelStreaming->OnLevelUnloaded.AddLambda([this, LevelName]()
+		if (!LevelWillBeRemovedCallbackWrappers.Contains(LevelFName))
 		{
-			HandleLevelRemoved(LevelName);
-		});
+			ULevelWillBeRemovedWrapper* Wrapper = NewObject<ULevelWillBeRemovedWrapper>();
+			Wrapper->Init(LevelFName);
+			Wrapper->OnLevelWillBeRemoved.BindLambda([this](FName LevelName)
+			{
+				HandleLevelRemoved(LevelName.ToString());
+				LevelWillBeRemovedCallbackWrappers.Remove(LevelName);
+			});
+			LevelWillBeRemovedCallbackWrappers.Add(LevelFName, Wrapper);
+
+			LevelStreaming->OnLevelUnloaded.AddDynamic(Wrapper, &ULevelWillBeRemovedWrapper::ExecuteIfBound);
+			//LevelStreaming->OnLevelHidden.AddDynamic(Wrapper, &ULevelWillBeRemovedWrapper::ExecuteIfBound);
+		}
 	}
 
 	TArray<FDeferredStablyNamedActorData> LevelDeferredActors;
@@ -297,7 +314,7 @@ void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
 		ULevel* NewLevel = nullptr;
 		for (ULevel* Level : World->GetLevels())
 		{
-			if (Level->GetPathName().Equals(LevelName))
+			if (Level->GetOutermost()->GetPathName().Equals(LevelName))
 			{
 				NewLevel = Level;
 				break;
@@ -331,6 +348,12 @@ void UStablyNamedActorManager::HandleLevelRemoved(const FString& LevelName)
 	ActiveActors.MultiFind(LevelName, ActiveLevelActors);
 	for (AActor* Actor : ActiveLevelActors)
 	{
+		if (Actor->IsPendingKill())
+		{
+			UE_LOG(LogSpatialReceiver, Warning, TEXT("Attempted to snooze actor %s that is pending kill. It was probably already destroyed by the level streaming out."),
+				*Actor->GetFullName());
+			continue;
+		}
 		// Move the actor into the persistent level so it doesn't get destroyed.
 		// Incoming component updates should still be applied to the actor.
 		Actor->SetActorHiddenInGame(true);
@@ -349,7 +372,7 @@ void UStablyNamedActorManager::LevelsChanged()
 	TSet<FString> NewLoadedLevels;
 	for (ULevel* Level : World->GetLevels())
 	{
-		NewLoadedLevels.Add(Level->GetPathName());
+		NewLoadedLevels.Add(Level->GetOutermost()->GetPathName());
 	}
 
 	TSet<FString> NewlyLoadedLevels = NewLoadedLevels.Difference(LoadedLevels);
@@ -590,7 +613,9 @@ public:
 		}
 
 		FString LevelPath = StaticActor->GetLevel()->GetPathName();
+		FString LevelPackagePath = StaticActor->GetLevel()->GetOutermost()->GetPathName();
 		GEngine->NetworkRemapPath(NetDriver, LevelPath);
+		GEngine->NetworkRemapPath(NetDriver, LevelPackagePath);
 		ULevel* OuterLevel = Cast<ULevel>(StaticFindObject(ULevel::StaticClass(), nullptr, *LevelPath));
 		if (OuterLevel == nullptr)
 		{
@@ -600,7 +625,7 @@ public:
 			DeferredStablyNamedActorData.EntityId = EntityId;
 			DeferredStablyNamedActorData.ComponentDatas = ComponentDatas;
 
-			StablyNamedActorManager->DeferStablyNamedActorForLevel(LevelPath, DeferredStablyNamedActorData);
+			StablyNamedActorManager->DeferStablyNamedActorForLevel(LevelPackagePath, DeferredStablyNamedActorData);
 			return nullptr;
 		}
 
@@ -627,7 +652,7 @@ public:
 			*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
 
 		// We've succeeded, so register the stably-named actor.
-		StablyNamedActorManager->RegisterStablyNamedActorForLevel(LevelPath, NewActor);
+		StablyNamedActorManager->RegisterStablyNamedActorForLevel(NewActor->GetLevel(), NewActor);
 
 		return NewActor;
 	}

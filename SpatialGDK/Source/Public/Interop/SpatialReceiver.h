@@ -95,6 +95,29 @@ struct FDeferredStablyNamedActorData {
 };
 
 DECLARE_DELEGATE_OneParam(FCreateDeferredStablyNamedActorDelegate, FDeferredStablyNamedActorData&);
+DECLARE_DELEGATE_OneParam(FLevelWillBeRemovedDelegate, FName);
+
+// TODO: this is really ugly
+UCLASS()
+class ULevelWillBeRemovedWrapper : public UObject {
+
+	GENERATED_BODY()
+
+private:
+	FName LevelName;
+
+public:
+	FLevelWillBeRemovedDelegate OnLevelWillBeRemoved;
+
+	void Init(const FName& LevelName)
+	{
+		this->LevelName = LevelName;
+	}
+
+	UFUNCTION()
+	void ExecuteIfBound();
+
+};
 
 UCLASS()
 class UStablyNamedActorManager : public UObject {
@@ -106,7 +129,7 @@ public:
 
 	// TODO: switch this interface to use FNames
 
-	void RegisterStablyNamedActorForLevel(const FString& LevelPath, AActor* Actor);
+	void RegisterStablyNamedActorForLevel(class ULevel* Level, AActor* Actor);
 	void DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData);
 
 	void HandleLevelAdded(const FString& LevelName);
@@ -128,6 +151,8 @@ private:
 	// Level path -> snoozed actors
 	// Used to keep the actors in memory when the level is destroyed.
 	TMultiMap<FString, TSharedPtr<AActor>> SnoozedActors;
+
+	TMap<FName, ULevelWillBeRemovedWrapper*> LevelWillBeRemovedCallbackWrappers;
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;
