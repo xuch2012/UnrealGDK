@@ -363,6 +363,47 @@ void UStablyNamedActorManager::HandleLevelRemoved(const FString& LevelName)
 
 		UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG snoozed actor %s for level %s"), *Actor->GetName(), *LevelName);
 		SnoozedActors.Add(LevelName, MakeShareable<AActor>(Actor));
+
+
+
+		FUnresolvedObjectsMap UnresolvedObjectsMap;
+		FUnresolvedObjectsMap HandoverUnresolvedObjectsMap;
+		ComponentFactory DataFactory(UnresolvedObjectsMap, HandoverUnresolvedObjectsMap, NetDriver);
+		// TODO: checks
+		USpatialActorChannel* Channel = NetDriver->GetActorChannelByEntityId(NetDriver->GetEntityRegistry()->GetEntityIdFromActor(Actor));
+
+		FClassInfo* Info = NetDriver->TypebindingManager->FindClassInfoByClass(Actor->GetClass());
+		check(Info);
+
+		FRepChangeState RepChanges = Channel->CreateInitialRepChangeState(Actor);
+		FHandoverChangeState HandoverChanges = Channel->CreateInitialHandoverChangeState(Info);
+
+		TArray<Worker_ComponentData> ComponentDatas;
+		TArray<Worker_ComponentData> DynamicComponentDatas = DataFactory.CreateComponentDatas(Actor, Info, RepChanges, HandoverChanges);
+		ComponentDatas.Append(DynamicComponentDatas);
+
+		// TODO: handle unresolved references
+
+		for (auto& SubobjectInfoPair : Info->SubobjectInfo)
+		{
+			FClassInfo* SubobjectInfo = SubobjectInfoPair.Value.Get();
+
+			UObject* Subobject = PackageMap->GetObjectFromUnrealObjectRef(FUnrealObjectRef(Channel->GetEntityId(), SubobjectInfoPair.Key));
+
+			FRepChangeState SubobjectRepChanges = Channel->CreateInitialRepChangeState(Subobject);
+			FHandoverChangeState SubobjectHandoverChanges = Channel->CreateInitialHandoverChangeState(SubobjectInfo);
+
+			UnresolvedObjectsMap.Empty();
+			HandoverUnresolvedObjectsMap.Empty();
+
+			TArray<Worker_ComponentData> ActorSubobjectDatas = DataFactory.CreateComponentDatas(Subobject, SubobjectInfo, SubobjectRepChanges, SubobjectHandoverChanges);
+			ComponentDatas.Append(ActorSubobjectDatas);
+
+			// TODO: handle unresolved references
+		}
+
+		BROKEN(
+		// TODO: do something with the component data here
 	}
 	ActiveActors.Remove(LevelName);
 }
