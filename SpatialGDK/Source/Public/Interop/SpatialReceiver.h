@@ -102,8 +102,11 @@ class UStablyNamedActorManager : public UObject {
 	GENERATED_BODY()
 
 public:
-	void Init(UWorld* World);
+	void Init(USpatialNetDriver* NetDriver);
 
+	// TODO: switch this interface to use FNames
+
+	void RegisterStablyNamedActorForLevel(const FString& LevelPath, AActor* Actor);
 	void DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData);
 
 	void HandleLevelAdded(const FString& LevelName);
@@ -119,8 +122,15 @@ private:
 	// Level path -> actor data
 	TMultiMap<FString, FDeferredStablyNamedActorData> DeferredStablyNamedActorData;
 
+	// Active stably-named actors in a sublevel.
+	TMultiMap<FString, AActor*> ActiveActors;
+
 	// Level path -> snoozed actors
-	TMultiMap<FString, AActor*> SnoozedActors;
+	// Used to keep the actors in memory when the level is destroyed.
+	TMultiMap<FString, TSharedPtr<AActor>> SnoozedActors;
+
+	UPROPERTY()
+	USpatialNetDriver* NetDriver;
 
 	UPROPERTY()
 	UWorld* World;

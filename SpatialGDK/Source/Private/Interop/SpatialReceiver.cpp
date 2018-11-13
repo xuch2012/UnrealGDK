@@ -10,6 +10,7 @@
 #include "EngineClasses/SpatialActorChannel.h"
 #include "EngineClasses/SpatialNetConnection.h"
 #include "EngineClasses/SpatialPackageMapClient.h"
+#include "Engine/LevelStreaming.h"
 #include "Engine/World.h"
 #include "Interop/Connection/SpatialWorkerConnection.h"
 #include "Interop/GlobalStateManager.h"
@@ -19,6 +20,7 @@
 #include "Schema/Rotation.h"
 #include "Schema/UnrealMetadata.h"
 #include "SpatialConstants.h"
+#include "Utils/ComponentFactory.h"
 #include "Utils/ComponentReader.h"
 #include "Utils/EntityRegistry.h"
 #include "Utils/RepLayoutUtils.h"
@@ -53,7 +55,7 @@ void USpatialReceiver::Init(USpatialNetDriver* InNetDriver, FTimerManager* InTim
 	TimerManager = InTimerManager;
 
 	StablyNamedActorManager = NewObject<UStablyNamedActorManager>();
-	StablyNamedActorManager->Init(World);
+	StablyNamedActorManager->Init(NetDriver);
 	StablyNamedActorManager->OnCreateDeferredStablyNamedActor().BindLambda([this](FDeferredStablyNamedActorData& DeferredStablyNamedActorData)
 	{
 		// TODO: make sure we haven't gotten the remove entity op
@@ -239,14 +241,21 @@ void USpatialReceiver::HandleActorAuthority(Worker_AuthorityChangeOp& Op)
 	}
 }
 
-void UStablyNamedActorManager::Init(UWorld* World)
+void UStablyNamedActorManager::Init(USpatialNetDriver* NetDriver)
 {
-	this->World = World;
+	this->NetDriver = NetDriver;
+	this->World = NetDriver->GetWorld();
 
 	World->OnLevelsChanged().AddLambda([this]()
 	{
 		LevelsChanged();
 	});
+}
+
+void UStablyNamedActorManager::RegisterStablyNamedActorForLevel(const FString& LevelPath, AActor* Actor)
+{
+	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG registered actor %s for level %s"), *Actor->GetName(), *LevelPath);
+	ActiveActors.Add(LevelPath, Actor);
 }
 
 void UStablyNamedActorManager::DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData)
@@ -260,6 +269,14 @@ void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
 {
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level added: %s"), *LevelName);
 
+	if (ULevelStreaming* LevelStreaming = World->GetLevelStreamingForPackageName(FName(*LevelName)))
+	{
+		LevelStreaming->OnLevelUnloaded.AddLambda([this, LevelName]()
+		{
+			HandleLevelRemoved(LevelName);
+		});
+	}
+
 	TArray<FDeferredStablyNamedActorData> LevelDeferredActors;
 	DeferredStablyNamedActorData.MultiFind(LevelName, LevelDeferredActors);
 	for (FDeferredStablyNamedActorData& DeferredActor : LevelDeferredActors)
@@ -271,12 +288,60 @@ void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
 	}
 	DeferredStablyNamedActorData.Remove(LevelName);
 
-	// TODO: handle snoozed actors
+	TArray<TSharedPtr<AActor>> LevelSnoozedActors;
+	SnoozedActors.MultiFind(LevelName, LevelSnoozedActors);
+	for (TSharedPtr<AActor>& Actor : LevelSnoozedActors)
+	{
+		// Move the actor into the streaming level.
+		World->RemoveActor(Actor.Get(), true);
+		ULevel* NewLevel = nullptr;
+		for (ULevel* Level : World->GetLevels())
+		{
+			if (Level->GetPathName().Equals(LevelName))
+			{
+				NewLevel = Level;
+				break;
+			}
+		}
+		if (NewLevel != nullptr)
+		{
+			Actor->Rename(nullptr, NewLevel);
+			NewLevel->Actors.Add(Actor.Get());
+			Actor->SetActorHiddenInGame(false);  // TODO: this will clobber any actual use of this field
+
+			ActiveActors.Add(LevelName, Actor.Get());
+			UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG un-snoozed actor %s for level %s"), *Actor->GetName(), *LevelName);
+		}
+		else
+		{
+			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to find new streaming level %s while un-snoozing actor %s (entity %lld)"),
+				*LevelName, *Actor->GetName(), NetDriver->GetEntityRegistry()->GetEntityIdFromActor(Actor.Get()));
+		}
+	}
+	SnoozedActors.Remove(LevelName);
 }
 
 void UStablyNamedActorManager::HandleLevelRemoved(const FString& LevelName)
 {
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level removed: %s"), *LevelName);
+
+	// We know the actors in this level are about to be destroyed, so we'll generate component updates from them so we can save the instance data until the level is streamed back in.
+	// Note that this will _not_ work on the server. There we assume that we will always have all levels streamed in.
+	TArray<AActor*> ActiveLevelActors;
+	ActiveActors.MultiFind(LevelName, ActiveLevelActors);
+	for (AActor* Actor : ActiveLevelActors)
+	{
+		// Move the actor into the persistent level so it doesn't get destroyed.
+		// Incoming component updates should still be applied to the actor.
+		Actor->SetActorHiddenInGame(true);
+		World->RemoveActor(Actor, true);
+		Actor->Rename(nullptr, World->PersistentLevel);
+		World->PersistentLevel->Actors.Add(Actor);
+
+		UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG snoozed actor %s for level %s"), *Actor->GetName(), *LevelName);
+		SnoozedActors.Add(LevelName, MakeShareable<AActor>(Actor));
+	}
+	ActiveActors.Remove(LevelName);
 }
 
 void UStablyNamedActorManager::LevelsChanged()
@@ -295,10 +360,10 @@ void UStablyNamedActorManager::LevelsChanged()
 		HandleLevelAdded(LevelName);
 	}
 
-	for (const FString& LevelName : NewlyUnloadedLevels)
-	{
-		HandleLevelRemoved(LevelName);
-	}
+	//for (const FString& LevelName : NewlyUnloadedLevels)
+	//{
+	//	HandleLevelRemoved(LevelName);
+	//}
 
 	LoadedLevels = NewLoadedLevels;
 }
@@ -560,6 +625,9 @@ public:
 
 		UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
 			*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
+
+		// We've succeeded, so register the stably-named actor.
+		StablyNamedActorManager->RegisterStablyNamedActorForLevel(LevelPath, NewActor);
 
 		return NewActor;
 	}
