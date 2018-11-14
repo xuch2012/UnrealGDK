@@ -113,6 +113,13 @@ Worker_RequestId USpatialSender::CreateEntity(USpatialActorChannel* Channel)
 	{
 		const FClassInfo& SubobjectInfo = *SubobjectInfoPair.Value;
 
+		// Static subobjects aren't guaranteed to exist on actor instances, check they are present before adding write acls
+		UObject* Subobject = PackageMap->GetObjectFromUnrealObjectRef(FUnrealObjectRef(Channel->GetEntityId(), SubobjectInfoPair.Key));
+		if (Subobject == nullptr)
+		{
+			continue;
+		}
+
 		ForAllSchemaComponentTypes([&](ESchemaComponentType Type)
 		{
 			Worker_ComponentId ComponentId = SubobjectInfo.SchemaComponents[Type];
@@ -172,6 +179,10 @@ Worker_RequestId USpatialSender::CreateEntity(USpatialActorChannel* Channel)
 		FClassInfo* SubobjectInfo = SubobjectInfoPair.Value.Get();
 
 		UObject* Subobject = PackageMap->GetObjectFromUnrealObjectRef(FUnrealObjectRef(Channel->GetEntityId(), SubobjectInfoPair.Key));
+		if (Subobject == nullptr)
+		{
+			continue;
+		}
 
 		FRepChangeState SubobjectRepChanges = Channel->CreateInitialRepChangeState(Subobject);
 		FHandoverChangeState SubobjectHandoverChanges = Channel->CreateInitialHandoverChangeState(SubobjectInfo);
@@ -341,6 +352,12 @@ void USpatialSender::SendRPC(TSharedRef<FPendingRPCParams> Params)
 	}
 
 	UObject* TargetObject = Params->TargetObject.Get();
+	if (PackageMap->GetUnrealObjectRefFromObject(TargetObject) == SpatialConstants::UNRESOLVED_OBJECT_REF)
+	{
+		UE_LOG(LogSpatialSender, Warning, TEXT("Trying to send RPC %s on unresolved Actor %s."), *Params->Function->GetName(), *TargetObject->GetName());
+		QueueOutgoingRPC(TargetObject, Params);
+		return;
+	}
 
 	FClassInfo* Info = TypebindingManager->FindClassInfoByObject(TargetObject);
 
