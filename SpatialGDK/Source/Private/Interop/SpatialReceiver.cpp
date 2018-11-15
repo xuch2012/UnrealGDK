@@ -712,11 +712,15 @@ public:
 	{
 		improbable::Position* Position = StaticComponentView->GetComponentData<improbable::Position>(EntityId);
 		improbable::Rotation* Rotation = StaticComponentView->GetComponentData<improbable::Rotation>(EntityId);
-		improbable::UnrealMetadata* UnrealMetadataComponent = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
+		improbable::UnrealMetadata* UnrealMetadata = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
 
-		check(Position && UnrealMetadataComponent);
+		if (UnrealMetadata == nullptr)
+		{
+			// Not an Unreal entity
+			return;
+		}
 
-		UClass* ActorClass = UnrealMetadataComponent->GetNativeEntityClass();
+		UClass* ActorClass = UnrealMetadata->GetNativeEntityClass();
 
 		if (ActorClass == nullptr)
 		{
@@ -736,10 +740,10 @@ public:
 		// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
 		if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
 		{
-			checkf(!UnrealMetadataComponent->OwnerWorkerAttribute.IsEmpty(), TEXT("A player controller entity must have an owner worker attribute."));
+			checkf(!UnrealMetadata->OwnerWorkerAttribute.IsEmpty(), TEXT("A player controller entity must have an owner worker attribute."));
 
 			FString URLString = FURL().ToString();
-			URLString += TEXT("?workerAttribute=") + UnrealMetadataComponent->OwnerWorkerAttribute;
+			URLString += TEXT("?workerAttribute=") + UnrealMetadata->OwnerWorkerAttribute;
 
 			Connection = NetDriver->AcceptNewPlayer(FURL(nullptr, *URLString, TRAVEL_Absolute), true);
 			check(Connection);
@@ -750,11 +754,11 @@ public:
 		{
 			UE_LOG(LogSpatialReceiver, Verbose, TEXT("Spawning a %s whilst checking out an entity."), *ActorClass->GetFullName());
 
-			if (EntityActor == nullptr && !UnrealMetadataComponent->StaticPath.IsEmpty())
+			if (EntityActor == nullptr && !UnrealMetadata->StaticPath.IsEmpty())
 			{
 				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
 				// Note that this can fail and return a null actor.
-				EntityActor = CreateNewStablyNamedActor(*UnrealMetadataComponent->StaticPath, Position, Rotation, ActorClass, EntityId);
+				EntityActor = CreateNewStablyNamedActor(*UnrealMetadata->StaticPath, Position, Rotation, ActorClass, EntityId);
 				if (EntityActor == nullptr)
 				{
 					// Failed, which means that the streaming level in which the stably named actor should be hasn't been created yet. We'll defer creating this actor for now.
