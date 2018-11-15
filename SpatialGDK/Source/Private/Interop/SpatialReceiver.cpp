@@ -506,7 +506,7 @@ public:
 			{
 				UObject* SourceValue = ObjectProperty->GetPropertyValue(SourcePtr);
 
-				if (SourceValue && !SourceValue->IsFullNameStableForNetworking())
+				if (SourceValue)
 				{
 					FString RefPath = SourceValue->GetPathName();
 
@@ -516,8 +516,16 @@ public:
 						GEngine->NetworkRemapPath(NetDriver, RefPath);
 					}
 
-					UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s attempting to resolve object reference %s"),
-						*ActorNameForLogging, *RefPath);
+					if (SourceValue->IsFullNameStableForNetworking())
+					{
+						UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s attempting to resolve object reference %s"),
+							*ActorNameForLogging, *RefPath);
+					}
+					else
+					{
+						UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s reference %s was marked as NOT stable for networking, attempting to resolve anyway"),
+							*ActorNameForLogging, *RefPath);
+					}
 
 					// TODO: add to unresolved references if not found
 					UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
@@ -555,6 +563,8 @@ public:
 				}
 				else
 				{
+					// TODO: handle references to replicated objects
+					// TODO: do something with references to non-replicated objects with unstable names
 					UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s ignoring object reference %s for property %s"),
 						*ActorNameForLogging,
 						SourceValue ? *SourceValue->GetFullName() : TEXT("nullptr"),
@@ -717,7 +727,7 @@ public:
 		if (UnrealMetadata == nullptr)
 		{
 			// Not an Unreal entity
-			return;
+			return false;
 		}
 
 		UClass* ActorClass = UnrealMetadata->GetNativeEntityClass();
