@@ -271,7 +271,7 @@ void UStablyNamedActorManager::RegisterStablyNamedActorForLevel(ULevel* Level, A
 {
 	const FString LevelPath = Level->GetOutermost()->GetPathName();
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG registered actor %s for level %s"), *Actor->GetName(), *LevelPath);
-	ActiveActors.Add(LevelPath, Actor);
+//	ActiveActors.Add(LevelPath, Actor);
 }
 
 void UStablyNamedActorManager::DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData)
@@ -315,107 +315,107 @@ void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
 	}
 	DeferredStablyNamedActorData.Remove(LevelName);
 
-	TArray<TSharedPtr<AActor>> LevelSnoozedActors;
-	SnoozedActors.MultiFind(LevelName, LevelSnoozedActors);
-	for (TSharedPtr<AActor>& Actor : LevelSnoozedActors)
-	{
-		// Move the actor into the streaming level.
-		World->RemoveActor(Actor.Get(), true);
-		ULevel* NewLevel = nullptr;
-		for (ULevel* Level : World->GetLevels())
-		{
-			if (Level->GetOutermost()->GetPathName().Equals(LevelName))
-			{
-				NewLevel = Level;
-				break;
-			}
-		}
-		if (NewLevel != nullptr)
-		{
-			Actor->Rename(nullptr, NewLevel);
-			NewLevel->Actors.Add(Actor.Get());
-			Actor->SetActorHiddenInGame(false);  // TODO: this will clobber any actual use of this field
-
-			ActiveActors.Add(LevelName, Actor.Get());
-			UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG un-snoozed actor %s for level %s"), *Actor->GetName(), *LevelName);
-		}
-		else
-		{
-			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to find new streaming level %s while un-snoozing actor %s (entity %lld)"),
-				*LevelName, *Actor->GetName(), NetDriver->GetEntityRegistry()->GetEntityIdFromActor(Actor.Get()));
-		}
-	}
-	SnoozedActors.Remove(LevelName);
+//	TArray<TSharedPtr<AActor>> LevelSnoozedActors;
+//	SnoozedActors.MultiFind(LevelName, LevelSnoozedActors);
+//	for (TSharedPtr<AActor>& Actor : LevelSnoozedActors)
+//	{
+//		// Move the actor into the streaming level.
+//		World->RemoveActor(Actor.Get(), true);
+//		ULevel* NewLevel = nullptr;
+//		for (ULevel* Level : World->GetLevels())
+//		{
+//			if (Level->GetOutermost()->GetPathName().Equals(LevelName))
+//			{
+//				NewLevel = Level;
+//				break;
+//			}
+//		}
+//		if (NewLevel != nullptr)
+//		{
+//			Actor->Rename(nullptr, NewLevel);
+//			NewLevel->Actors.Add(Actor.Get());
+//			Actor->SetActorHiddenInGame(false);  // TODO: this will clobber any actual use of this field
+//
+//			ActiveActors.Add(LevelName, Actor.Get());
+//			UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG un-snoozed actor %s for level %s"), *Actor->GetName(), *LevelName);
+//		}
+//		else
+//		{
+//			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to find new streaming level %s while un-snoozing actor %s (entity %lld)"),
+//				*LevelName, *Actor->GetName(), NetDriver->GetEntityRegistry()->GetEntityIdFromActor(Actor.Get()));
+//		}
+//	}
+//	SnoozedActors.Remove(LevelName);
 }
 
 void UStablyNamedActorManager::HandleLevelRemoved(const FString& LevelName)
 {
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level removed: %s"), *LevelName);
 
-	// We know the actors in this level are about to be destroyed, so we'll generate component updates from them so we can save the instance data until the level is streamed back in.
-	// Note that this will _not_ work on the server. There we assume that we will always have all levels streamed in.
-	TArray<AActor*> ActiveLevelActors;
-	ActiveActors.MultiFind(LevelName, ActiveLevelActors);
-	for (AActor* Actor : ActiveLevelActors)
-	{
-		if (Actor->IsPendingKill())
-		{
-			UE_LOG(LogSpatialReceiver, Warning, TEXT("Attempted to snooze actor %s that is pending kill. It was probably already destroyed by the level streaming out."),
-				*Actor->GetFullName());
-			continue;
-		}
-		// Move the actor into the persistent level so it doesn't get destroyed.
-		// Incoming component updates should still be applied to the actor.
-		Actor->SetActorHiddenInGame(true);
-		World->RemoveActor(Actor, true);
-		Actor->Rename(nullptr, World->PersistentLevel);
-		World->PersistentLevel->Actors.Add(Actor);
-
-		UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG snoozed actor %s for level %s"), *Actor->GetName(), *LevelName);
-		SnoozedActors.Add(LevelName, MakeShareable<AActor>(Actor));
-
-
-
-		FUnresolvedObjectsMap UnresolvedObjectsMap;
-		FUnresolvedObjectsMap HandoverUnresolvedObjectsMap;
-		ComponentFactory DataFactory(UnresolvedObjectsMap, HandoverUnresolvedObjectsMap, NetDriver);
-		// TODO: checks
-		USpatialActorChannel* Channel = NetDriver->GetActorChannelByEntityId(NetDriver->GetEntityRegistry()->GetEntityIdFromActor(Actor));
-
-		FClassInfo* Info = NetDriver->TypebindingManager->FindClassInfoByClass(Actor->GetClass());
-		check(Info);
-
-		FRepChangeState RepChanges = Channel->CreateInitialRepChangeState(Actor);
-		FHandoverChangeState HandoverChanges = Channel->CreateInitialHandoverChangeState(Info);
-
-		TArray<Worker_ComponentData> ComponentDatas;
-		TArray<Worker_ComponentData> DynamicComponentDatas = DataFactory.CreateComponentDatas(Actor, Info, RepChanges, HandoverChanges);
-		ComponentDatas.Append(DynamicComponentDatas);
-
-		// TODO: handle unresolved references
-
-		for (auto& SubobjectInfoPair : Info->SubobjectInfo)
-		{
-			FClassInfo* SubobjectInfo = SubobjectInfoPair.Value.Get();
-
-			UObject* Subobject = PackageMap->GetObjectFromUnrealObjectRef(FUnrealObjectRef(Channel->GetEntityId(), SubobjectInfoPair.Key));
-
-			FRepChangeState SubobjectRepChanges = Channel->CreateInitialRepChangeState(Subobject);
-			FHandoverChangeState SubobjectHandoverChanges = Channel->CreateInitialHandoverChangeState(SubobjectInfo);
-
-			UnresolvedObjectsMap.Empty();
-			HandoverUnresolvedObjectsMap.Empty();
-
-			TArray<Worker_ComponentData> ActorSubobjectDatas = DataFactory.CreateComponentDatas(Subobject, SubobjectInfo, SubobjectRepChanges, SubobjectHandoverChanges);
-			ComponentDatas.Append(ActorSubobjectDatas);
-
-			// TODO: handle unresolved references
-		}
-
-		BROKEN(
-		// TODO: do something with the component data here
-	}
-	ActiveActors.Remove(LevelName);
+//	// We know the actors in this level are about to be destroyed, so we'll generate component updates from them so we can save the instance data until the level is streamed back in.
+//	// Note that this will _not_ work on the server. There we assume that we will always have all levels streamed in.
+//	TArray<AActor*> ActiveLevelActors;
+//	ActiveActors.MultiFind(LevelName, ActiveLevelActors);
+//	for (AActor* Actor : ActiveLevelActors)
+//	{
+//		if (Actor->IsPendingKill())
+//		{
+//			UE_LOG(LogSpatialReceiver, Warning, TEXT("Attempted to snooze actor %s that is pending kill. It was probably already destroyed by the level streaming out."),
+//				*Actor->GetFullName());
+//			continue;
+//		}
+//		// Move the actor into the persistent level so it doesn't get destroyed.
+//		// Incoming component updates should still be applied to the actor.
+//		Actor->SetActorHiddenInGame(true);
+//		World->RemoveActor(Actor, true);
+//		Actor->Rename(nullptr, World->PersistentLevel);
+//		World->PersistentLevel->Actors.Add(Actor);
+//
+//		UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG snoozed actor %s for level %s"), *Actor->GetName(), *LevelName);
+//		SnoozedActors.Add(LevelName, MakeShareable<AActor>(Actor));
+//
+//
+//
+//		FUnresolvedObjectsMap UnresolvedObjectsMap;
+//		FUnresolvedObjectsMap HandoverUnresolvedObjectsMap;
+//		ComponentFactory DataFactory(UnresolvedObjectsMap, HandoverUnresolvedObjectsMap, NetDriver);
+//		// TODO: checks
+//		USpatialActorChannel* Channel = NetDriver->GetActorChannelByEntityId(NetDriver->GetEntityRegistry()->GetEntityIdFromActor(Actor));
+//
+//		FClassInfo* Info = NetDriver->TypebindingManager->FindClassInfoByClass(Actor->GetClass());
+//		check(Info);
+//
+//		FRepChangeState RepChanges = Channel->CreateInitialRepChangeState(Actor);
+//		FHandoverChangeState HandoverChanges = Channel->CreateInitialHandoverChangeState(Info);
+//
+//		TArray<Worker_ComponentData> ComponentDatas;
+//		TArray<Worker_ComponentData> DynamicComponentDatas = DataFactory.CreateComponentDatas(Actor, Info, RepChanges, HandoverChanges);
+//		ComponentDatas.Append(DynamicComponentDatas);
+//
+//		// TODO: handle unresolved references
+//
+//		for (auto& SubobjectInfoPair : Info->SubobjectInfo)
+//		{
+//			FClassInfo* SubobjectInfo = SubobjectInfoPair.Value.Get();
+//
+//			UObject* Subobject = PackageMap->GetObjectFromUnrealObjectRef(FUnrealObjectRef(Channel->GetEntityId(), SubobjectInfoPair.Key));
+//
+//			FRepChangeState SubobjectRepChanges = Channel->CreateInitialRepChangeState(Subobject);
+//			FHandoverChangeState SubobjectHandoverChanges = Channel->CreateInitialHandoverChangeState(SubobjectInfo);
+//
+//			UnresolvedObjectsMap.Empty();
+//			HandoverUnresolvedObjectsMap.Empty();
+//
+//			TArray<Worker_ComponentData> ActorSubobjectDatas = DataFactory.CreateComponentDatas(Subobject, SubobjectInfo, SubobjectRepChanges, SubobjectHandoverChanges);
+//			ComponentDatas.Append(ActorSubobjectDatas);
+//
+//			// TODO: handle unresolved references
+//		}
+//
+//		BROKEN(
+//		// TODO: do something with the component data here
+//	}
+//	ActiveActors.Remove(LevelName);
 }
 
 void UStablyNamedActorManager::LevelsChanged()
@@ -493,11 +493,13 @@ public:
 		{
 			UProperty* Property = *PropertyIter;
 
-			// TODO: do only instance editable properties?
-			if (Property->HasAnyPropertyFlags(CPF_Transient))
+			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_ComputedFlags))
 			{
 				continue;
 			}
+
+			UE_LOG(LogSpatialReceiver, Log, TEXT("Stably-named actor %s attempting to retrieve property %s"),
+				*ActorNameForLogging, *Property->GetName());
 
 			void* SourcePtr = Property->ContainerPtrToValuePtr<void>(SourceObject);
 			void* DestPtr = Property->ContainerPtrToValuePtr<void>(DestObject);
@@ -943,6 +945,14 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 
 	UEntityRegistry* EntityRegistry = NetDriver->GetEntityRegistry();
 	check(EntityRegistry);
+
+	improbable::UnrealMetadata* UnrealMetadata = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
+
+	if (UnrealMetadata == nullptr)
+	{
+		// Not an Unreal entity
+		return;
+	}
 
 	if (AActor* EntityActor = EntityRegistry->GetActorFromEntityId(EntityId))
 	{
