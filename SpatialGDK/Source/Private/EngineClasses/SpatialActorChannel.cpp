@@ -90,8 +90,13 @@ void USpatialActorChannel::DeleteEntityIfAuthoritative()
 
 	UE_LOG(LogSpatialActorChannel, Log, TEXT("Delete entity request on %lld. Has authority: %d"), EntityId, (int)bHasAuthority);
 
+	auto IsOwningLevelBeingRemoved = [this]() -> bool
+	{
+		return GetActor() && GetActor()->GetLevel() && GetActor()->GetLevel()->bIsBeingRemoved;
+	};
+
 	// If we have authority and aren't trying to delete a critical entity, delete it
-	if (bHasAuthority && !IsSingletonEntity())
+	if (bHasAuthority && !IsSingletonEntity() && !(IsStablyNamedEntity() && IsOwningLevelBeingRemoved()))
 	{
 		Sender->SendDeleteEntityRequest(EntityId);
 	}

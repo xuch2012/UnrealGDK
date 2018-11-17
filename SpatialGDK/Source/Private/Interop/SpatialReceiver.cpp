@@ -493,7 +493,7 @@ public:
 		{
 			UProperty* Property = *PropertyIter;
 
-			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_ComputedFlags))
+			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_ComputedFlags | CPF_Net))
 			{
 				continue;
 			}
@@ -575,8 +575,11 @@ public:
 			}
 			else
 			{
-				// Copy the actual property value over to the new actor's component.
-				Property->CopyCompleteValue(DestPtr, SourcePtr);
+				// Copy the actual property value over to the new actor's component, if they're not the same.
+				if (!Property->Identical(DestPtr, SourcePtr))
+				{
+					Property->CopyCompleteValue(DestPtr, SourcePtr);
+				}
 			}
 		}
 	}
@@ -677,8 +680,11 @@ public:
 
 		FString LevelPath = StaticActor->GetLevel()->GetPathName();
 		FString LevelPackagePath = StaticActor->GetLevel()->GetOutermost()->GetPathName();
-		GEngine->NetworkRemapPath(NetDriver, LevelPath);
-		GEngine->NetworkRemapPath(NetDriver, LevelPackagePath);
+		if (GEngine)
+		{
+			GEngine->NetworkRemapPath(NetDriver, LevelPath);
+			GEngine->NetworkRemapPath(NetDriver, LevelPackagePath);
+		}
 		ULevel* OuterLevel = Cast<ULevel>(StaticFindObject(ULevel::StaticClass(), nullptr, *LevelPath));
 		if (OuterLevel == nullptr)
 		{
