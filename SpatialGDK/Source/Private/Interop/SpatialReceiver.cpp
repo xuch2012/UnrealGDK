@@ -354,7 +354,7 @@ public:
 		{
 			UProperty* Property = *PropertyIter;
 
-			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_ComputedFlags | CPF_Net))
+			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_Net))
 			{
 				continue;
 			}
