@@ -95,7 +95,6 @@ struct FDeferredStablyNamedActorData {
 };
 
 DECLARE_DELEGATE_OneParam(FCreateDeferredStablyNamedActorDelegate, FDeferredStablyNamedActorData&);
-DECLARE_DELEGATE_OneParam(FLevelWillBeRemovedDelegate, FName);
 
 UCLASS()
 class UStablyNamedActorManager : public UObject {
@@ -105,22 +104,19 @@ class UStablyNamedActorManager : public UObject {
 public:
 	void Init(USpatialNetDriver* NetDriver);
 
-	// TODO: switch this interface to use FNames
-
 	void DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData);
-
-	void HandleLevelAdded(const FString& LevelName);
 
 	FCreateDeferredStablyNamedActorDelegate& OnCreateDeferredStablyNamedActor() { return CreateDeferredStablyNamedActorDelegate; }
 
 private:
 	void LevelsChanged();
+	void HandleLevelAdded(const FName& LevelName);
 
 	// Keep track of the loaded streaming level's we've already reacted to.
-	TSet<FString> LoadedLevels;
+	TSet<FName> LoadedLevels;
 
 	// Level path -> actor data
-	TMultiMap<FString, FDeferredStablyNamedActorData> DeferredStablyNamedActorData;
+	TMultiMap<FName, FDeferredStablyNamedActorData> DeferredStablyNamedActorData;
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;

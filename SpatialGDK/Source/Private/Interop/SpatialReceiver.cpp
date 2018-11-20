@@ -266,12 +266,12 @@ void UStablyNamedActorManager::DeferStablyNamedActorForLevel(const FString& Leve
 {
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG deferring spawning actor %lld for level %s"),
 		DeferredActorData.EntityId, *LevelPath);
-	DeferredStablyNamedActorData.Add(LevelPath, DeferredActorData);
+	DeferredStablyNamedActorData.Add(FName(*LevelPath), DeferredActorData);
 }
 
-void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
+void UStablyNamedActorManager::HandleLevelAdded(const FName& LevelName)
 {
-	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level added: %s"), *LevelName);
+	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level added: %s"), *LevelName.ToString());
 
 	TArray<FDeferredStablyNamedActorData> LevelDeferredActors;
 	DeferredStablyNamedActorData.MultiFind(LevelName, LevelDeferredActors);
@@ -279,7 +279,7 @@ void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
 	{
 		UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG handling deferred stably named actor %lld for level %s"),
 			DeferredActor.EntityId,
-			*LevelName);
+			*LevelName.ToString());
 		CreateDeferredStablyNamedActorDelegate.ExecuteIfBound(DeferredActor);
 	}
 	DeferredStablyNamedActorData.Remove(LevelName);
@@ -287,15 +287,15 @@ void UStablyNamedActorManager::HandleLevelAdded(const FString& LevelName)
 
 void UStablyNamedActorManager::LevelsChanged()
 {
-	TSet<FString> NewLoadedLevels;
+	TSet<FName> NewLoadedLevels;
 	for (ULevel* Level : World->GetLevels())
 	{
-		NewLoadedLevels.Add(Level->GetOutermost()->GetPathName());
+		NewLoadedLevels.Add(FName(*Level->GetOutermost()->GetPathName()));
 	}
 
-	TSet<FString> NewlyLoadedLevels = NewLoadedLevels.Difference(LoadedLevels);
+	TSet<FName> NewlyLoadedLevels = NewLoadedLevels.Difference(LoadedLevels);
 
-	for (const FString& LevelName : NewlyLoadedLevels)
+	for (const FName& LevelName : NewlyLoadedLevels)
 	{
 		HandleLevelAdded(LevelName);
 	}
