@@ -1,5 +1,4 @@
 // Copyright (c) Improbable Worlds Ltd, All Rights Reserved
-#pragma optimize("", off)
 
 #include "Utils/ComponentReader.h"
 
@@ -19,13 +18,12 @@ DEFINE_LOG_CATEGORY(LogSpatialComponentReader);
 namespace improbable
 {
 
-ComponentReader::ComponentReader(USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap, TSet<FUnrealObjectRef>& InUnresolvedRefs, bool bInCallRepNotifies)
+ComponentReader::ComponentReader(USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap, TSet<FUnrealObjectRef>& InUnresolvedRefs)
 	: PackageMap(InNetDriver->PackageMap)
 	, NetDriver(InNetDriver)
 	, TypebindingManager(InNetDriver->TypebindingManager)
 	, RootObjectReferencesMap(InObjectReferencesMap)
 	, UnresolvedRefs(InUnresolvedRefs)
-	, bCallRepNotifies(bInCallRepNotifies)
 {
 }
 
@@ -164,7 +162,7 @@ void ComponentReader::ApplySchemaObject(Schema_Object* ComponentObject, UObject*
 				}
 
 				// Parent.Property is the "root" replicated property, e.g. if a struct property was flattened
-				if (Parent.Property->HasAnyPropertyFlags(CPF_RepNotify))  // && bCallRepNotifies)
+				if (Parent.Property->HasAnyPropertyFlags(CPF_RepNotify))
 				{
 					bool bIsIdentical = Cmd.Property->Identical(RepState->StaticBuffer.GetData() + SwappedCmd.Offset, Data);
 
@@ -508,5 +506,3 @@ uint32 ComponentReader::GetPropertyCount(const Schema_Object* Object, Schema_Fie
 }
 
 }
-
-#pragma optimize("", on)

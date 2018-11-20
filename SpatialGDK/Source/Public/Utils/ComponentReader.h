@@ -13,7 +13,7 @@ namespace improbable
 class ComponentReader
 {
 public:
-	ComponentReader(class USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap, TSet<FUnrealObjectRef>& InUnresolvedRefs, bool bInCallRepNotifies);
+	ComponentReader(class USpatialNetDriver* InNetDriver, FObjectReferencesMap& InObjectReferencesMap, TSet<FUnrealObjectRef>& InUnresolvedRefs);
 
 	void ApplyComponentData(const Worker_ComponentData& ComponentData, UObject* Object, USpatialActorChannel* Channel, bool bIsHandover);
 	void ApplyComponentUpdate(const Worker_ComponentUpdate& ComponentUpdate, UObject* Object, USpatialActorChannel* Channel, bool bIsHandover);
@@ -33,7 +33,6 @@ private:
 	class USpatialTypebindingManager* TypebindingManager;
 	FObjectReferencesMap& RootObjectReferencesMap;
 	TSet<FUnrealObjectRef>& UnresolvedRefs;
-	bool bCallRepNotifies;
 };
 
 }

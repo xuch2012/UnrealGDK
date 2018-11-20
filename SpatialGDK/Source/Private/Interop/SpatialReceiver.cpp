@@ -982,7 +982,7 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 		FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
 		TSet<FUnrealObjectRef> UnresolvedRefs;
 
-		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs, /* bCallRepNotifies */ false);
+		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
 		Reader.ApplyComponentData(Data, TargetObject, Channel, /* bIsHandover */ false);
 
 		QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
@@ -992,7 +992,7 @@ void USpatialReceiver::ApplyComponentData(Worker_EntityId EntityId, Worker_Compo
 		FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
 		TSet<FUnrealObjectRef> UnresolvedRefs;
 
-		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs, /* bCallRepNotifies */ false);
+		ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
 		Reader.ApplyComponentData(Data, TargetObject, Channel, /* bIsHandover */ true);
 
 		QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
@@ -1212,7 +1212,7 @@ void USpatialReceiver::ApplyComponentUpdate(const Worker_ComponentUpdate& Compon
 
 	FObjectReferencesMap& ObjectReferencesMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
 	TSet<FUnrealObjectRef> UnresolvedRefs;
-	ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs, /* blCallRepNotifies */ true);
+	ComponentReader Reader(NetDriver, ObjectReferencesMap, UnresolvedRefs);
 	Reader.ApplyComponentUpdate(ComponentUpdate, TargetObject, Channel, bIsHandover);
 
 	QueueIncomingRepUpdates(ChannelObjectPair, ObjectReferencesMap, UnresolvedRefs);
