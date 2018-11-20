@@ -97,28 +97,6 @@ struct FDeferredStablyNamedActorData {
 DECLARE_DELEGATE_OneParam(FCreateDeferredStablyNamedActorDelegate, FDeferredStablyNamedActorData&);
 DECLARE_DELEGATE_OneParam(FLevelWillBeRemovedDelegate, FName);
 
-// TODO: this is really ugly
-UCLASS()
-class ULevelWillBeRemovedWrapper : public UObject {
-
-	GENERATED_BODY()
-
-private:
-	FName LevelName;
-
-public:
-	FLevelWillBeRemovedDelegate OnLevelWillBeRemoved;
-
-	void Init(const FName& LevelName)
-	{
-		this->LevelName = LevelName;
-	}
-
-	UFUNCTION()
-	void ExecuteIfBound();
-
-};
-
 UCLASS()
 class UStablyNamedActorManager : public UObject {
 
@@ -129,30 +107,20 @@ public:
 
 	// TODO: switch this interface to use FNames
 
-	void RegisterStablyNamedActorForLevel(class ULevel* Level, AActor* Actor);
 	void DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData);
 
 	void HandleLevelAdded(const FString& LevelName);
-	void HandleLevelRemoved(const FString& LevelName);
 
 	FCreateDeferredStablyNamedActorDelegate& OnCreateDeferredStablyNamedActor() { return CreateDeferredStablyNamedActorDelegate; }
 
 private:
 	void LevelsChanged();
 
+	// Keep track of the loaded streaming level's we've already reacted to.
 	TSet<FString> LoadedLevels;
 
 	// Level path -> actor data
 	TMultiMap<FString, FDeferredStablyNamedActorData> DeferredStablyNamedActorData;
-
-	// Active stably-named actors in a sublevel.
-	TMultiMap<FString, AActor*> ActiveActors;
-
-	// Level path -> snoozed actors
-	// Used to keep the actors in memory when the level is destroyed.
-	TMultiMap<FString, TSharedPtr<AActor>> SnoozedActors;
-
-	TMap<FName, ULevelWillBeRemovedWrapper*> LevelWillBeRemovedCallbackWrappers;
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;
