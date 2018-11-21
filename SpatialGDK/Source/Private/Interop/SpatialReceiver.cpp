@@ -25,6 +25,8 @@
 #include "Utils/EntityRegistry.h"
 #include "Utils/RepLayoutUtils.h"
 
+#include <functional>
+
 DEFINE_LOG_CATEGORY(LogSpatialReceiver);
 
 using namespace improbable;
@@ -354,7 +356,7 @@ public:
 		{
 			UProperty* Property = *PropertyIter;
 
-			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly | CPF_Net))
+			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly))
 			{
 				continue;
 			}
@@ -521,6 +523,80 @@ public:
 		return NewActor;
 	}
 
+	void PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate) {
+		for (TFieldIterator<UProperty> PropertyIter(Object->GetClass()); PropertyIter; ++PropertyIter)
+		{
+			UProperty* Property = *PropertyIter;
+
+			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly))
+			{
+				continue;
+			}
+
+			void* PropertyPtr = Property->ContainerPtrToValuePtr<void>(Object);
+
+			if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
+			{
+				UObject* SourceValue = ObjectProperty->GetPropertyValue(PropertyPtr);
+
+				if (DoIgnorePredicate(Object, Property, SourceValue))
+				{
+					continue;
+				}
+
+				if (SourceValue && SourceValue->IsValidLowLevel())
+				{
+					if (SourceValue->IsPendingKill())
+					{
+						UE_LOG(LogSpatialReceiver, Error, TEXT("Object %s property %s for static actor entity %lld resolved to an object that is pending kill: %s"),
+							*Object->GetPathName(), *ObjectProperty->GetName(), EntityId, *SourceValue->GetPathName());
+						continue;
+					}
+
+					FString RefPath = SourceValue->GetPathName();
+
+					// Fix up the path so its references map to the current world (important for PIE).
+					if (GEngine)
+					{
+						GEngine->NetworkRemapPath(NetDriver, RefPath);
+					}
+
+					UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
+					if (RefTarget)
+					{
+						DuplicationSeed.Add(SourceValue, RefTarget);
+					}
+					else
+					{
+						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to re-resolve reference for entity %lld for property %s in static actor %s value in static actor: %s"),
+							EntityId,
+							*Property->GetPathName(),
+							*Object->GetPathName(),
+							*SourceValue->GetPathName());
+					}
+				}
+			}
+		}
+	};
+
+	UObject* ReResolveReference(UObject* Object)
+	{
+		if (Object == nullptr)
+		{
+			return nullptr;
+		}
+
+		FString RefPath = Object->GetPathName();
+
+		// Fix up the path so its references map to the current world (important for PIE).
+		if (GEngine)
+		{
+			GEngine->NetworkRemapPath(NetDriver, RefPath);
+		}
+
+		return FindObject<UObject>(ANY_PACKAGE, *RefPath);
+	};
+
 	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
 	{
 		if (NetDriver->IsServer())
@@ -539,6 +615,13 @@ public:
 			return nullptr;
 		}
 
+		if (!StaticActor->IsA(ActorClass))
+		{
+			UE_LOG(LogSpatialReceiver, Warning, TEXT("Found a stably-named actor for entity %lld with unexpected class (%s) at path %s, expected class %s"),
+				EntityId, *StaticActor->GetClass()->GetPathName(), *StablePath, *ActorClass->GetPathName());
+			return nullptr;
+		}
+
 		FString LevelPath = StaticActor->GetLevel()->GetPathName();
 		FString LevelPackagePath = StaticActor->GetLevel()->GetOutermost()->GetPathName();
 		if (GEngine)
@@ -549,7 +632,7 @@ public:
 		ULevel* OuterLevel = Cast<ULevel>(StaticFindObject(ULevel::StaticClass(), nullptr, *LevelPath));
 		if (OuterLevel == nullptr)
 		{
-			UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find level %s in which to spawn entity %lld"), *LevelPath, EntityId);
+			UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find level %s in which to spawn entity %lld. Deferring actor creation."), *LevelPath, EntityId);
 
 			FDeferredStablyNamedActorData DeferredStablyNamedActorData;
 			DeferredStablyNamedActorData.EntityId = EntityId;
@@ -559,24 +642,80 @@ public:
 			return nullptr;
 		}
 
-		AActor* NewActor = CreateActor(Position, Rotation, ActorClass, true, StaticActor->GetFName(), OuterLevel);
+		UObject* NewOuter = ReResolveReference(StaticActor->GetOuter());
+		if (NewOuter == nullptr)
+		{
+			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to resolve new outer for static actor %s"), *StaticActor->GetPathName());
+			return nullptr;
+		}
+
+		TSet<UObject*> ObjectsToIgnore;
+		for (UActorComponent* Component : StaticActor->GetComponents())
+		{
+			ObjectsToIgnore.Add(Component);
+		}
+		USceneComponent* RootComponent = StaticActor->GetRootComponent();
+
+		std::function<bool(UObject*, UProperty*, UObject*)> DoIgnorePredicate = [RootComponent, &ObjectsToIgnore](UObject* Object, UProperty* Property, UObject* ReferenceTarget) -> bool
+		{
+			if (Object->IsA(USceneComponent::StaticClass()) &&
+				Cast<USceneComponent>(Object) == RootComponent &&
+				Property->GetName().Contains(TEXT("AttachParent")))
+			{
+				// Specifically don't ignore AttachParent for the Actor's root component, since we don't want to duplicate those.
+				return false;
+			}
+			return ObjectsToIgnore.Contains(ReferenceTarget);
+		};
+
+		// Tell StaticDuplicateObject to specifically use these objects instead of referencing them.
+		// Maps reference in StaticActor to desired reference
+		TMap<UObject*, UObject*> DuplicationSeed;
+		DuplicationSeed.Add(StaticActor->GetOuter(), NewOuter);
+		PopulateDuplicationSeed(DuplicationSeed, StaticActor, DoIgnorePredicate);
+		for (UActorComponent* Component : StaticActor->GetComponents())
+		{
+			PopulateDuplicationSeed(DuplicationSeed, Component, DoIgnorePredicate);
+		}
+
+		// Objects created within StaticDuplicateObjectEx.
+		TMap<UObject*, UObject*> CreatedObjects;
+
+		FObjectDuplicationParameters DupParams(StaticActor, NewOuter);
+		DupParams.DestName = StaticActor->GetFName();
+		DupParams.DuplicationSeed = DuplicationSeed;
+		DupParams.CreatedObjects = &CreatedObjects;
+		AActor* NewActor = Cast<AActor>(StaticDuplicateObjectEx(DupParams));
 		if (NewActor == nullptr)
 		{
 			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new stably-named actor for entity %lld from template %s"), EntityId, *StaticActor->GetFullName());
 			return nullptr;
 		}
 
-		// Copy over property values from the template actor into the new one.
-		//FString ActorNameForLogging = FString::Printf(TEXT("%s (entity %lld)"), *NewActor->GetFullName(), EntityId);
-		//CopyAllObjectProperties(NewActor, StaticActor, ActorNameForLogging, OutNewAttachParent);
-		//CopyAllComponentProperties(NewActor, StaticActor, ActorNameForLogging, OutNewAttachParent);
+		// TODO: check CreatedObjects for things that aren't subobjects
+		
+		NewActor->GetLevel()->Actors.Add(NewActor);
+		NewActor->GetLevel()->ActorsForGC.Add(NewActor);
+
+		FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+		FRotator SpawnRotation = Rotation->ToFRotator();
+
+		//StaticActor->UpdateComponentTransforms();
+		//SpawnLocation = SpawnLocation - StaticActor->GetActorLocation();
+		//SpawnRotation = SpawnRotation - StaticActor->GetActorRotation();
+
+		// TODO: owner, instigator, remote owned, nofail
+		NewActor->PostSpawnInitialize(FTransform(SpawnRotation, SpawnLocation), nullptr, nullptr, false, false, true);
 
 		// Initialize components after copying over their data from the map.
-		//check(!NewActor->IsActorInitialized());
-		//NewActor->PreInitializeComponents();
-		//NewActor->InitializeComponents();
-		//NewActor->PostInitializeComponents();
-		//check(NewActor->IsActorInitialized());
+		check(!NewActor->IsActorInitialized());
+		NewActor->PreInitializeComponents();
+		NewActor->InitializeComponents();
+		NewActor->PostInitializeComponents();
+		check(NewActor->IsActorInitialized());
+
+		World->AddNetworkActor(NewActor);
 
 		UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
 			*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
@@ -645,6 +784,8 @@ public:
 			if (EntityActor == nullptr)
 			{
 				EntityActor = CreateActor(Position, Rotation, ActorClass, true);
+
+				bDoingDeferredSpawn = true;
 			}
 
 			if (EntityActor == nullptr)
@@ -653,8 +794,6 @@ public:
 				UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to spawn an actor for entity %lld of class %s"), EntityId, *ActorClass->GetFullName());
 				return false;
 			}
-
-			bDoingDeferredSpawn = true;
 
 			// Don't have authority over Actor until SpatialOS delegates authority
 			EntityActor->Role = ROLE_SimulatedProxy;
@@ -698,31 +837,13 @@ public:
 
 		if (StaticActor)
 		{
-			// Populated when setting component values, used to inform the parent that it has a new child.
-			USceneComponent* NewAttachParent = nullptr;
-
-			// Copy component properties over from the static actor, if we're spawning from one.
-			// NOTE: we do this after FinishSpawning because components that exist only in blueprints won't be added until then.
-			FString ActorNameForLogging = FString::Printf(TEXT("%s (entity %lld)"), *EntityActor->GetFullName(), EntityId);
-			CopyAllObjectProperties(EntityActor, StaticActor, ActorNameForLogging, NewAttachParent);
-			CopyAllComponentProperties(EntityActor, StaticActor, ActorNameForLogging, NewAttachParent);
-
 			// Mark all components as dirty so any rendering-related changes (e.g. material references) made during the property copy get reflected.
 			EntityActor->MarkComponentsRenderStateDirty();
 
 			// Update the final transform for this actor to account for any differences in the static actor's scale.
-			// TODO: scale should probably be spatially-replicated in case it changes
 			StaticActor->UpdateComponentTransforms();
 			EntityActor->UpdateComponentTransforms();
 			EntityActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
-
-			// TODO: probably need to do this after applying SpatialOS component data too.
-			if (NewAttachParent)
-			{
-				NewAttachParent->ConditionalUpdateComponentToWorld();
-				EntityActor->SetActorTransform(NewAttachParent->GetComponentTransform());
-				EntityActor->AttachToComponent(NewAttachParent, FAttachmentTransformRules::SnapToTargetIncludingScale);
-			}
 
 			// After all of the above, make sure the transforms within the actor are up to date.
 			EntityActor->UpdateComponentTransforms();
