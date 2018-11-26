@@ -720,6 +720,16 @@ public:
 		UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
 			*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
 
+		// Update the final transform for this actor to account for any differences in the static actor's scale, and to overwrite
+		// any position or rotation changes from the static actor.
+		StaticActor->UpdateComponentTransforms();
+		NewActor->UpdateComponentTransforms();
+		NewActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
+
+		// After all of the above, make sure the transforms within the actor are up to date.
+		NewActor->UpdateComponentTransforms();
+		NewActor->MarkComponentsRenderStateDirty();
+
 		return NewActor;
 	}
 
@@ -833,21 +843,6 @@ public:
 		if (bDoingDeferredSpawn)
 		{
 			EntityActor->FinishSpawning(FTransform(SpawnRotation, SpawnLocation));
-		}
-
-		if (StaticActor)
-		{
-			// Mark all components as dirty so any rendering-related changes (e.g. material references) made during the property copy get reflected.
-			EntityActor->MarkComponentsRenderStateDirty();
-
-			// Update the final transform for this actor to account for any differences in the static actor's scale.
-			StaticActor->UpdateComponentTransforms();
-			EntityActor->UpdateComponentTransforms();
-			EntityActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
-
-			// After all of the above, make sure the transforms within the actor are up to date.
-			EntityActor->UpdateComponentTransforms();
-			EntityActor->UpdateOverlaps();
 		}
 
 		FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
