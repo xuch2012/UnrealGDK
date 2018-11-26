@@ -328,6 +328,8 @@ public:
 	AActor* EntityActor = nullptr;
 	USpatialActorChannel* Channel = nullptr;
 
+	bool bDidDeferCreation = false;
+
 public:
 	FSpatialActorCreator(
 		Worker_EntityId EntityId,
@@ -597,6 +599,7 @@ public:
 		return FindObject<UObject>(ANY_PACKAGE, *RefPath);
 	};
 
+	// Note that this will set bDidDeferCreation to true if the streaming level hasn't been streamed in yet.
 	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
 	{
 		if (NetDriver->IsServer())
@@ -639,6 +642,17 @@ public:
 			DeferredStablyNamedActorData.ComponentDatas = ComponentDatas;
 
 			StablyNamedActorManager->DeferStablyNamedActorForLevel(LevelPackagePath, DeferredStablyNamedActorData);
+
+			bDidDeferCreation = true;
+			return nullptr;
+		}
+
+		if (!OuterLevel->GetWorld() || !OuterLevel->GetWorld()->IsGameWorld())
+		{
+			// If we've found a world and it isn't a game world, this means we're in the editor and the path wasn't changed to a PIE path,
+			// so we're trying to reference a level that isn't part of this world's streaming level set.
+			UE_LOG(LogSpatialReceiver, Error, TEXT("Found level %s in which to spawn entity %lld, but it wasn't a game world. This might mean the snapshot doesn't match the loaded level."),
+				*LevelPath, EntityId);
 			return nullptr;
 		}
 
@@ -784,9 +798,9 @@ public:
 				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
 				// Note that this can fail and return a null actor.
 				EntityActor = CreateNewStablyNamedActor(*UnrealMetadata->StaticPath, Position, Rotation, ActorClass, EntityId);
-				if (EntityActor == nullptr)
+				if (EntityActor == nullptr && bDidDeferCreation)
 				{
-					// Failed, which means that the streaming level in which the stably named actor should be hasn't been created yet. We'll defer creating this actor for now.
+					// We've deferred creating this actor for now since its streaming level is not yet present.
 					return false;
 				}
 			}
