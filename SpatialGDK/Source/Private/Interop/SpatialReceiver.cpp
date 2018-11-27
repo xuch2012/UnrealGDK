@@ -307,6 +307,8 @@ void UStablyNamedActorManager::LevelsChanged()
 
 DECLARE_DELEGATE_OneParam(FAddComponentDataDelegate, improbable::Component*);
 
+using FOffsetPropertyPair = TPair<uint32, UProperty*>;
+
 namespace {
 class FSpatialActorCreator {
 private:
@@ -525,7 +527,7 @@ public:
 		return NewActor;
 	}
 
-	void PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate) {
+	void PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMap<FOffsetPropertyPair, FUnrealObjectRef>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate) {
 		for (TFieldIterator<UProperty> PropertyIter(Object->GetClass()); PropertyIter; ++PropertyIter)
 		{
 			UProperty* Property = *PropertyIter;
@@ -567,6 +569,19 @@ public:
 					if (RefTarget)
 					{
 						DuplicationSeed.Add(SourceValue, RefTarget);
+					}
+					else if (SourceValue->IsA(AActor::StaticClass()) && Cast<AActor>(SourceValue)->GetIsReplicated())
+					{
+						// We've failed to resolve a reference to a replicated actor, which means it hasn't come off the wire yet.
+						// TODO: create full object ref with path
+						FUnrealObjectRef UnresolvedRef;
+						UnresolvedRef.Path = RefPath;
+						UnresolvedReferences.Add(FOffsetPropertyPair(ObjectOffset, Property), UnresolvedRef);
+						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to re-resolve reference to replicated actor for entity %lld for property %s in static actor %s value in static actor: %s"),
+							EntityId,
+							*Property->GetPathName(),
+							*Object->GetPathName(),
+							*SourceValue->GetPathName());
 					}
 					else
 					{
@@ -682,14 +697,18 @@ public:
 			return ObjectsToIgnore.Contains(ReferenceTarget);
 		};
 
+		FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
+		SubobjectToOffsetMap StaticSubobjectOffsets = improbable::CreateOffsetMapFromActor(StaticActor, Info);
+
 		// Tell StaticDuplicateObject to specifically use these objects instead of referencing them.
 		// Maps reference in StaticActor to desired reference
 		TMap<UObject*, UObject*> DuplicationSeed;
 		DuplicationSeed.Add(StaticActor->GetOuter(), NewOuter);
-		PopulateDuplicationSeed(DuplicationSeed, StaticActor, DoIgnorePredicate);
-		for (UActorComponent* Component : StaticActor->GetComponents())
+		TMap<FOffsetPropertyPair, FUnrealObjectRef> UnresolvedReferences;
+		PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, 0, StaticActor, DoIgnorePredicate);
+		for (auto& SubobjectOffsetPair : StaticSubobjectOffsets)
 		{
-			PopulateDuplicationSeed(DuplicationSeed, Component, DoIgnorePredicate);
+			PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, SubobjectOffsetPair.Value, SubobjectOffsetPair.Key, DoIgnorePredicate);
 		}
 
 		// Objects created within StaticDuplicateObjectEx.
@@ -707,6 +726,31 @@ public:
 		}
 
 		// TODO: check CreatedObjects for things that aren't subobjects
+
+		// Zero out any unresolved object references, since they will have been copied. The copies should be garbage collected after removing the reference.
+		// TODO: figure out how to force them not to be copied
+		if (UnresolvedReferences.Num() > 0)
+		{
+			for (auto OffsetPropertyPair : UnresolvedReferences)
+			{
+				uint32 SubobjectOffset = OffsetPropertyPair.Key.Key;
+				UProperty* Property = OffsetPropertyPair.Key.Value;
+				UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property);
+				if (ObjectProperty == nullptr)
+				{
+					// TODO: handle this better
+					UE_LOG(LogSpatialReceiver, Error, TEXT("Expected UObjectProperty for unresolved reference"));
+					continue;
+				}
+				UObject* Object = NewActor;
+				if (SubobjectOffset > 0)
+				{
+					Object = NewActor->GetDefaultSubobjectByName(Info->SubobjectInfo[SubobjectOffset]->SubobjectName);
+				}
+				void* RefPointerPointer = ObjectProperty->ContainerPtrToValuePtr<void>(Object);
+				ObjectProperty->SetObjectPropertyValue(RefPointerPointer, nullptr);
+			}
+		}
 		
 		NewActor->GetLevel()->Actors.Add(NewActor);
 		NewActor->GetLevel()->ActorsForGC.Add(NewActor);
@@ -714,10 +758,6 @@ public:
 		FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
 		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
 		FRotator SpawnRotation = Rotation->ToFRotator();
-
-		//StaticActor->UpdateComponentTransforms();
-		//SpawnLocation = SpawnLocation - StaticActor->GetActorLocation();
-		//SpawnRotation = SpawnRotation - StaticActor->GetActorRotation();
 
 		// TODO: owner, instigator, remote owned, nofail
 		NewActor->PostSpawnInitialize(FTransform(SpawnRotation, SpawnLocation), nullptr, nullptr, false, false, true);
