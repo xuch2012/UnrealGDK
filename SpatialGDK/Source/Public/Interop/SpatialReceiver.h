@@ -15,6 +15,8 @@
 #include <WorkerSDK/improbable/c_schema.h>
 #include <WorkerSDK/improbable/c_worker.h>
 
+#include <functional>
+
 #include "SpatialReceiver.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogSpatialReceiver, Log, All);
@@ -125,6 +127,56 @@ private:
 	UWorld* World;
 
 	FCreateDeferredStablyNamedActorDelegate CreateDeferredStablyNamedActorDelegate;
+};
+
+DECLARE_DELEGATE_OneParam(FAddComponentDataDelegate, improbable::Component*);
+
+using FOffsetPropertyPair = TPair<uint32, UProperty*>;
+
+class FSpatialActorCreator {
+private:
+	// This stuff needs to be initialized at creation.
+	Worker_EntityId EntityId;
+	USpatialNetDriver* NetDriver;
+	UWorld* World;
+	USpatialStaticComponentView* StaticComponentView;
+	UEntityRegistry* EntityRegistry;
+	USpatialTypebindingManager* TypebindingManager;
+	USpatialSender* Sender;
+	UStablyNamedActorManager* StablyNamedActorManager;
+
+	FAddComponentDataDelegate AddComponentDataCallback;
+	TArray<TSharedPtr<improbable::Component>> ComponentDatas;
+
+public:
+	AActor* StaticActor = nullptr;
+	AActor* EntityActor = nullptr;
+	USpatialActorChannel* Channel = nullptr;
+
+	bool bDidDeferCreation = false;
+
+public:
+	FSpatialActorCreator(
+		Worker_EntityId EntityId,
+		USpatialNetDriver* NetDriver,
+		UStablyNamedActorManager* StablyNamedActorManager);
+
+	void SetComponentDatas(const TArray<TSharedPtr<improbable::Component>> ComponentDatas) { this->ComponentDatas = ComponentDatas; }
+
+	FAddComponentDataDelegate& AddComponentDataDelegate() { return AddComponentDataCallback; }
+
+	AActor* CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred);
+
+	void PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMap<FOffsetPropertyPair, FUnrealObjectRef>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate);
+
+	UObject* ReResolveReference(UObject* Object);
+
+	// Note that this will set bDidDeferCreation to true if the streaming level hasn't been streamed in yet.
+	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId);
+
+	bool CreateActorForEntity();
+
+	void FinalizeNewActor();
 };
 
 using FIncomingRPCArray = TArray<TSharedPtr<FPendingIncomingRPC>>;

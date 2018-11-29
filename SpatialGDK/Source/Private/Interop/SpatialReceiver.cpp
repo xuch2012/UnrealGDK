@@ -305,495 +305,461 @@ void UStablyNamedActorManager::LevelsChanged()
 	LoadedLevels = NewLoadedLevels;
 }
 
-DECLARE_DELEGATE_OneParam(FAddComponentDataDelegate, improbable::Component*);
+FSpatialActorCreator::FSpatialActorCreator(
+	Worker_EntityId EntityId,
+	USpatialNetDriver* NetDriver,
+	UStablyNamedActorManager* StablyNamedActorManager)
+	: EntityId(EntityId)
+	, NetDriver(NetDriver)
+	, StablyNamedActorManager(StablyNamedActorManager)
+{
+	World = NetDriver->GetWorld();
+	StaticComponentView = NetDriver->StaticComponentView;
+	EntityRegistry = NetDriver->GetEntityRegistry();
+	TypebindingManager = NetDriver->TypebindingManager;
+	Sender = NetDriver->Sender;
+}
 
-using FOffsetPropertyPair = TPair<uint32, UProperty*>;
-
-namespace {
-class FSpatialActorCreator {
-private:
-	// This stuff needs to be initialized at creation.
-	Worker_EntityId EntityId;
-	USpatialNetDriver* NetDriver;
-	UWorld* World;
-	USpatialStaticComponentView* StaticComponentView;
-	UEntityRegistry* EntityRegistry;
-	USpatialTypebindingManager* TypebindingManager;
-	USpatialSender* Sender;
-	UStablyNamedActorManager* StablyNamedActorManager;
-
-	FAddComponentDataDelegate AddComponentDataCallback;
-	TArray<TSharedPtr<improbable::Component>> ComponentDatas;
-
-public:
-	AActor* StaticActor = nullptr;
-	AActor* EntityActor = nullptr;
-	USpatialActorChannel* Channel = nullptr;
-
-	bool bDidDeferCreation = false;
-
-public:
-	FSpatialActorCreator(
-		Worker_EntityId EntityId,
-		USpatialNetDriver* NetDriver,
-		UStablyNamedActorManager* StablyNamedActorManager)
-		: EntityId(EntityId)
-		, NetDriver(NetDriver)
-		, StablyNamedActorManager(StablyNamedActorManager)
+AActor* FSpatialActorCreator::CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred)
+{
+	FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+	FRotator InitialRotation = Rotation->ToFRotator();
+	AActor* NewActor = nullptr;
+	if (ActorClass)
 	{
-		World = NetDriver->GetWorld();
-		StaticComponentView = NetDriver->StaticComponentView;
-		EntityRegistry = NetDriver->GetEntityRegistry();
-		TypebindingManager = NetDriver->TypebindingManager;
-		Sender = NetDriver->Sender;
+		//bRemoteOwned needs to be public in source code. This might be a controversial change.
+		FActorSpawnParameters SpawnInfo;
+		SpawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		SpawnInfo.bRemoteOwned = !NetDriver->IsServer();
+		SpawnInfo.bNoFail = true;
+		// We defer the construction in the GDK pipeline to allow initialization of replicated properties first.
+		SpawnInfo.bDeferConstruction = bDeferred;
+
+		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+
+		NewActor = World->SpawnActorAbsolute(ActorClass, FTransform(InitialRotation, SpawnLocation), SpawnInfo);
+		check(NewActor);
 	}
 
-	void SetComponentDatas(const TArray<TSharedPtr<improbable::Component>> ComponentDatas) { this->ComponentDatas = ComponentDatas; }
+	return NewActor;
+}
 
-	FAddComponentDataDelegate& AddComponentDataDelegate() { return AddComponentDataCallback; }
-
-	AActor* CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred)
+void FSpatialActorCreator::PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMap<FOffsetPropertyPair, FUnrealObjectRef>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate)
+{
+	for (TFieldIterator<UProperty> PropertyIter(Object->GetClass()); PropertyIter; ++PropertyIter)
 	{
-		FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
-		FRotator InitialRotation = Rotation->ToFRotator();
-		AActor* NewActor = nullptr;
-		if (ActorClass)
+		UProperty* Property = *PropertyIter;
+
+		if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly))
 		{
-			//bRemoteOwned needs to be public in source code. This might be a controversial change.
-			FActorSpawnParameters SpawnInfo;
-			SpawnInfo.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			SpawnInfo.bRemoteOwned = !NetDriver->IsServer();
-			SpawnInfo.bNoFail = true;
-			// We defer the construction in the GDK pipeline to allow initialization of replicated properties first.
-			SpawnInfo.bDeferConstruction = bDeferred;
-
-			FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
-
-			NewActor = World->SpawnActorAbsolute(ActorClass, FTransform(InitialRotation, SpawnLocation), SpawnInfo);
-			check(NewActor);
+			continue;
 		}
 
-		return NewActor;
-	}
+		void* PropertyPtr = Property->ContainerPtrToValuePtr<void>(Object);
 
-	void PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMap<FOffsetPropertyPair, FUnrealObjectRef>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate) {
-		for (TFieldIterator<UProperty> PropertyIter(Object->GetClass()); PropertyIter; ++PropertyIter)
+		if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
 		{
-			UProperty* Property = *PropertyIter;
+			UObject* SourceValue = ObjectProperty->GetPropertyValue(PropertyPtr);
 
-			if (Property->HasAnyPropertyFlags(CPF_Transient | CPF_DuplicateTransient | CPF_EditorOnly))
+			if (DoIgnorePredicate(Object, Property, SourceValue))
 			{
 				continue;
 			}
 
-			void* PropertyPtr = Property->ContainerPtrToValuePtr<void>(Object);
-
-			if (UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property))
+			if (SourceValue && SourceValue->IsValidLowLevel())
 			{
-				UObject* SourceValue = ObjectProperty->GetPropertyValue(PropertyPtr);
-
-				if (DoIgnorePredicate(Object, Property, SourceValue))
+				if (SourceValue->IsPendingKill())
 				{
+					UE_LOG(LogSpatialReceiver, Error, TEXT("Object %s property %s for static actor entity %lld resolved to an object that is pending kill: %s"),
+						*Object->GetPathName(), *ObjectProperty->GetName(), EntityId, *SourceValue->GetPathName());
 					continue;
 				}
 
-				if (SourceValue && SourceValue->IsValidLowLevel())
+				FString RefPath = SourceValue->GetPathName();
+
+				// Fix up the path so its references map to the current world (important for PIE).
+				if (GEngine)
 				{
-					if (SourceValue->IsPendingKill())
-					{
-						UE_LOG(LogSpatialReceiver, Error, TEXT("Object %s property %s for static actor entity %lld resolved to an object that is pending kill: %s"),
-							*Object->GetPathName(), *ObjectProperty->GetName(), EntityId, *SourceValue->GetPathName());
-						continue;
-					}
+					GEngine->NetworkRemapPath(NetDriver, RefPath);
+				}
 
-					FString RefPath = SourceValue->GetPathName();
-
-					// Fix up the path so its references map to the current world (important for PIE).
-					if (GEngine)
-					{
-						GEngine->NetworkRemapPath(NetDriver, RefPath);
-					}
-
-					UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
-					if (RefTarget)
-					{
-						DuplicationSeed.Add(SourceValue, RefTarget);
-					}
-					else if (SourceValue->IsA(AActor::StaticClass()) && Cast<AActor>(SourceValue)->GetIsReplicated())
-					{
-						// We've failed to resolve a reference to a replicated actor, which means it hasn't come off the wire yet.
-						// TODO: create full object ref with path
-						FUnrealObjectRef UnresolvedRef;
-						UnresolvedRef.Path = RefPath;
-						UnresolvedReferences.Add(FOffsetPropertyPair(ObjectOffset, Property), UnresolvedRef);
-						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to re-resolve reference to replicated actor for entity %lld for property %s in static actor %s value in static actor: %s"),
-							EntityId,
-							*Property->GetPathName(),
-							*Object->GetPathName(),
-							*SourceValue->GetPathName());
-					}
-					else
-					{
-						UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to re-resolve reference for entity %lld for property %s in static actor %s value in static actor: %s"),
-							EntityId,
-							*Property->GetPathName(),
-							*Object->GetPathName(),
-							*SourceValue->GetPathName());
-					}
+				UObject* RefTarget = FindObject<UObject>(ANY_PACKAGE, *RefPath);
+				if (RefTarget)
+				{
+					DuplicationSeed.Add(SourceValue, RefTarget);
+				}
+				else if (SourceValue->IsA(AActor::StaticClass()) && Cast<AActor>(SourceValue)->GetIsReplicated())
+				{
+					// We've failed to resolve a reference to a replicated actor, which means it hasn't come off the wire yet.
+					// TODO: create full object ref with path
+					FUnrealObjectRef UnresolvedRef;
+					UnresolvedRef.Path = RefPath;
+					UnresolvedReferences.Add(FOffsetPropertyPair(ObjectOffset, Property), UnresolvedRef);
+					UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to re-resolve reference to replicated actor for entity %lld for property %s in static actor %s value in static actor: %s"),
+						EntityId,
+						*Property->GetPathName(),
+						*Object->GetPathName(),
+						*SourceValue->GetPathName());
+				}
+				else
+				{
+					UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to re-resolve reference for entity %lld for property %s in static actor %s value in static actor: %s"),
+						EntityId,
+						*Property->GetPathName(),
+						*Object->GetPathName(),
+						*SourceValue->GetPathName());
 				}
 			}
 		}
-	};
-
-	UObject* ReResolveReference(UObject* Object)
-	{
-		if (Object == nullptr)
-		{
-			return nullptr;
-		}
-
-		FString RefPath = Object->GetPathName();
-
-		// Fix up the path so its references map to the current world (important for PIE).
-		if (GEngine)
-		{
-			GEngine->NetworkRemapPath(NetDriver, RefPath);
-		}
-
-		return FindObject<UObject>(ANY_PACKAGE, *RefPath);
-	};
-
-	// Note that this will set bDidDeferCreation to true if the streaming level hasn't been streamed in yet.
-	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
-	{
-		if (NetDriver->IsServer())
-		{
-			bool noop = true;
-		}
-		else
-		{
-			bool noop = false;
-		}
-
-		StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *StablePath));
-		if (StaticActor == nullptr)
-		{
-			UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find stably-named actor for entity %lld with path %s"), EntityId, *StablePath);
-			return nullptr;
-		}
-
-		if (!StaticActor->IsA(ActorClass))
-		{
-			UE_LOG(LogSpatialReceiver, Warning, TEXT("Found a stably-named actor for entity %lld with unexpected class (%s) at path %s, expected class %s"),
-				EntityId, *StaticActor->GetClass()->GetPathName(), *StablePath, *ActorClass->GetPathName());
-			return nullptr;
-		}
-
-		FString LevelPath = StaticActor->GetLevel()->GetPathName();
-		FString LevelPackagePath = StaticActor->GetLevel()->GetOutermost()->GetPathName();
-		if (GEngine)
-		{
-			GEngine->NetworkRemapPath(NetDriver, LevelPath);
-			GEngine->NetworkRemapPath(NetDriver, LevelPackagePath);
-		}
-		ULevel* OuterLevel = Cast<ULevel>(StaticFindObject(ULevel::StaticClass(), nullptr, *LevelPath));
-		if (OuterLevel == nullptr)
-		{
-			UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find level %s in which to spawn entity %lld. Deferring actor creation."), *LevelPath, EntityId);
-
-			FDeferredStablyNamedActorData DeferredStablyNamedActorData;
-			DeferredStablyNamedActorData.EntityId = EntityId;
-			DeferredStablyNamedActorData.ComponentDatas = ComponentDatas;
-
-			StablyNamedActorManager->DeferStablyNamedActorForLevel(LevelPackagePath, DeferredStablyNamedActorData);
-
-			bDidDeferCreation = true;
-			return nullptr;
-		}
-
-		if (!OuterLevel->GetWorld() || !OuterLevel->GetWorld()->IsGameWorld())
-		{
-			// If we've found a world and it isn't a game world, this means we're in the editor and the path wasn't changed to a PIE path,
-			// so we're trying to reference a level that isn't part of this world's streaming level set.
-			UE_LOG(LogSpatialReceiver, Error, TEXT("Found level %s in which to spawn entity %lld, but it wasn't a game world. This might mean the snapshot doesn't match the loaded level."),
-				*LevelPath, EntityId);
-			return nullptr;
-		}
-
-		UObject* NewOuter = ReResolveReference(StaticActor->GetOuter());
-		if (NewOuter == nullptr)
-		{
-			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to resolve new outer for static actor %s"), *StaticActor->GetPathName());
-			return nullptr;
-		}
-
-		TSet<UObject*> ObjectsToIgnore;
-		for (UActorComponent* Component : StaticActor->GetComponents())
-		{
-			ObjectsToIgnore.Add(Component);
-		}
-		USceneComponent* RootComponent = StaticActor->GetRootComponent();
-
-		std::function<bool(UObject*, UProperty*, UObject*)> DoIgnorePredicate = [RootComponent, &ObjectsToIgnore](UObject* Object, UProperty* Property, UObject* ReferenceTarget) -> bool
-		{
-			if (Object->IsA(USceneComponent::StaticClass()) &&
-				Cast<USceneComponent>(Object) == RootComponent &&
-				Property->GetName().Contains(TEXT("AttachParent")))
-			{
-				// Specifically don't ignore AttachParent for the Actor's root component, since we don't want to duplicate those.
-				return false;
-			}
-			return ObjectsToIgnore.Contains(ReferenceTarget);
-		};
-
-		FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
-		SubobjectToOffsetMap StaticSubobjectOffsets = improbable::CreateOffsetMapFromActor(StaticActor, Info);
-
-		// Tell StaticDuplicateObject to specifically use these objects instead of referencing them.
-		// Maps reference in StaticActor to desired reference
-		TMap<UObject*, UObject*> DuplicationSeed;
-		DuplicationSeed.Add(StaticActor->GetOuter(), NewOuter);
-		TMap<FOffsetPropertyPair, FUnrealObjectRef> UnresolvedReferences;
-		PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, 0, StaticActor, DoIgnorePredicate);
-		for (auto& SubobjectOffsetPair : StaticSubobjectOffsets)
-		{
-			PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, SubobjectOffsetPair.Value, SubobjectOffsetPair.Key, DoIgnorePredicate);
-		}
-
-		// Objects created within StaticDuplicateObjectEx.
-		TMap<UObject*, UObject*> CreatedObjects;
-
-		FObjectDuplicationParameters DupParams(StaticActor, NewOuter);
-		DupParams.DestName = StaticActor->GetFName();
-		DupParams.DuplicationSeed = DuplicationSeed;
-		DupParams.CreatedObjects = &CreatedObjects;
-		AActor* NewActor = Cast<AActor>(StaticDuplicateObjectEx(DupParams));
-		if (NewActor == nullptr)
-		{
-			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new stably-named actor for entity %lld from template %s"), EntityId, *StaticActor->GetFullName());
-			return nullptr;
-		}
-
-		// TODO: check CreatedObjects for things that aren't subobjects
-
-		// Zero out any unresolved object references, since they will have been copied. The copies should be garbage collected after removing the reference.
-		// TODO: figure out how to force them not to be copied
-		if (UnresolvedReferences.Num() > 0)
-		{
-			for (auto OffsetPropertyPair : UnresolvedReferences)
-			{
-				uint32 SubobjectOffset = OffsetPropertyPair.Key.Key;
-				UProperty* Property = OffsetPropertyPair.Key.Value;
-				UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property);
-				if (ObjectProperty == nullptr)
-				{
-					// TODO: handle this better
-					UE_LOG(LogSpatialReceiver, Error, TEXT("Expected UObjectProperty for unresolved reference"));
-					continue;
-				}
-				UObject* Object = NewActor;
-				if (SubobjectOffset > 0)
-				{
-					Object = NewActor->GetDefaultSubobjectByName(Info->SubobjectInfo[SubobjectOffset]->SubobjectName);
-				}
-				void* RefPointerPointer = ObjectProperty->ContainerPtrToValuePtr<void>(Object);
-				ObjectProperty->SetObjectPropertyValue(RefPointerPointer, nullptr);
-			}
-		}
-		
-		NewActor->GetLevel()->Actors.Add(NewActor);
-		NewActor->GetLevel()->ActorsForGC.Add(NewActor);
-
-		FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
-		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
-		FRotator SpawnRotation = Rotation->ToFRotator();
-
-		// TODO: owner, instigator, remote owned, nofail
-		NewActor->PostSpawnInitialize(FTransform(SpawnRotation, SpawnLocation), nullptr, nullptr, false, false, true);
-
-		// Initialize components after copying over their data from the map.
-		check(!NewActor->IsActorInitialized());
-		NewActor->PreInitializeComponents();
-		NewActor->InitializeComponents();
-		NewActor->PostInitializeComponents();
-		check(NewActor->IsActorInitialized());
-
-		World->AddNetworkActor(NewActor);
-
-		UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
-			*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
-
-		// Update the final transform for this actor to account for any differences in the static actor's scale, and to overwrite
-		// any position or rotation changes from the static actor.
-		StaticActor->UpdateComponentTransforms();
-		NewActor->UpdateComponentTransforms();
-		NewActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
-
-		// After all of the above, make sure the transforms within the actor are up to date.
-		NewActor->UpdateComponentTransforms();
-		NewActor->MarkComponentsRenderStateDirty();
-
-		return NewActor;
-	}
-
-	bool CreateActorForEntity()
-	{
-		improbable::Position* Position = StaticComponentView->GetComponentData<improbable::Position>(EntityId);
-		improbable::Rotation* Rotation = StaticComponentView->GetComponentData<improbable::Rotation>(EntityId);
-		improbable::UnrealMetadata* UnrealMetadata = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
-
-		if (UnrealMetadata == nullptr)
-		{
-			// Not an Unreal entity
-			return false;
-		}
-
-		UClass* ActorClass = UnrealMetadata->GetNativeEntityClass();
-
-		if (ActorClass == nullptr)
-		{
-			// TODO: error
-			return false;
-		}
-
-		// Initial Singleton Actor replication is handled with GlobalStateManager::LinkExistingSingletonActors
-		if (NetDriver->IsServer() && ActorClass->HasAnySpatialClassFlags(SPATIALCLASS_Singleton))
-		{
-			return false;
-		}
-
-		UNetConnection* Connection = nullptr;
-		bool bDoingDeferredSpawn = false;
-
-		// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
-		if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
-		{
-			checkf(!UnrealMetadata->OwnerWorkerAttribute.IsEmpty(), TEXT("A player controller entity must have an owner worker attribute."));
-
-			FString URLString = FURL().ToString();
-			URLString += TEXT("?workerAttribute=") + UnrealMetadata->OwnerWorkerAttribute;
-
-			Connection = NetDriver->AcceptNewPlayer(FURL(nullptr, *URLString, TRAVEL_Absolute), true);
-			check(Connection);
-
-			EntityActor = Connection->PlayerController;
-		}
-		else
-		{
-			UE_LOG(LogSpatialReceiver, Verbose, TEXT("Spawning a %s whilst checking out an entity."), *ActorClass->GetFullName());
-
-			if (EntityActor == nullptr && !UnrealMetadata->StaticPath.IsEmpty())
-			{
-				// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
-				// Note that this can fail and return a null actor.
-				EntityActor = CreateNewStablyNamedActor(*UnrealMetadata->StaticPath, Position, Rotation, ActorClass, EntityId);
-				if (EntityActor == nullptr && bDidDeferCreation)
-				{
-					// We've deferred creating this actor for now since its streaming level is not yet present.
-					return false;
-				}
-			}
-
-			if (EntityActor == nullptr)
-			{
-				EntityActor = CreateActor(Position, Rotation, ActorClass, true);
-
-				bDoingDeferredSpawn = true;
-			}
-
-			if (EntityActor == nullptr)
-			{
-				// If we've gotten this far and still don't have an actor, something has gone wrong, so early out.
-				UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to spawn an actor for entity %lld of class %s"), EntityId, *ActorClass->GetFullName());
-				return false;
-			}
-
-			// Don't have authority over Actor until SpatialOS delegates authority
-			EntityActor->Role = ROLE_SimulatedProxy;
-			EntityActor->RemoteRole = ROLE_Authority;
-
-			// Get the net connection for this actor.
-			if (NetDriver->IsServer())
-			{
-				// Currently, we just create an actor channel on the "catch-all" connection, then create a new actor channel once we check out the player controller
-				// and create a new connection. This is fine due to lazy actor channel creation in USpatialNetDriver::ServerReplicateActors. However, the "right" thing to do
-				// would be to make sure to create anything which depends on the PlayerController _after_ the PlayerController's connection is set up so we can use the right
-				// one here. We should revisit this after implementing working sets - UNR:411
-				Connection = NetDriver->GetSpatialOSNetConnection();
-			}
-			else
-			{
-				Connection = NetDriver->GetSpatialOSNetConnection();
-			}
-		}
-
-		// Set up actor channel.
-		USpatialPackageMapClient* SpatialPackageMap = Cast<USpatialPackageMapClient>(Connection->PackageMap);
-		Channel = Cast<USpatialActorChannel>(Connection->CreateChannel(CHTYPE_Actor, NetDriver->IsServer()));
-		if (!Channel)
-		{
-			UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to create an actor channel when receiving entity %lld. The actor will not be spawned."), EntityId);
-			EntityActor->Destroy(true);
-			return false;
-		}
-
-		// Add to entity registry.
-		EntityRegistry->AddToRegistry(EntityId, EntityActor);
-
-		FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
-		FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
-		FRotator SpawnRotation = Rotation->ToFRotator();
-		if (bDoingDeferredSpawn)
-		{
-			EntityActor->FinishSpawning(FTransform(SpawnRotation, SpawnLocation));
-		}
-
-		FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
-		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, improbable::CreateOffsetMapFromActor(EntityActor, Info));
-		Channel->SetChannelActor(EntityActor);
-
-		// TODO: move somewhere else?
-		for (TSharedPtr<improbable::Component>& Component : ComponentDatas)
-		{
-			AddComponentDataCallback.ExecuteIfBound(Component.Get());
-		}
-
-		return true;
-	}
-
-	void FinalizeNewActor()
-	{
-		if (!NetDriver->IsServer())
-		{
-			// Update interest on the entity's components after receiving initial component data (so Role and RemoteRole are properly set).
-			Sender->SendComponentInterest(EntityActor, EntityId);
-
-			// This is a bit of a hack unfortunately, among the core classes only PlayerController implements this function and it requires
-			// a player index. For now we don't support split screen, so the number is always 0.
-			if (EntityActor->IsA(APlayerController::StaticClass()))
-			{
-				uint8 PlayerIndex = 0;
-				// FInBunch takes size in bits not bytes
-				FInBunch Bunch(NetDriver->ServerConnection, &PlayerIndex, sizeof(PlayerIndex) * 8);
-				EntityActor->OnActorChannelOpen(Bunch, NetDriver->ServerConnection);
-			}
-			else
-			{
-				FInBunch Bunch(NetDriver->ServerConnection);
-				EntityActor->OnActorChannelOpen(Bunch, NetDriver->ServerConnection);
-			}
-
-		}
-
-		// Taken from PostNetInit
-		if (!EntityActor->HasActorBegunPlay())
-		{
-			EntityActor->DispatchBeginPlay();
-		}
-
-		EntityActor->UpdateOverlaps();
 	}
 };
+
+UObject* FSpatialActorCreator::ReResolveReference(UObject* Object)
+{
+	if (Object == nullptr)
+	{
+		return nullptr;
+	}
+
+	FString RefPath = Object->GetPathName();
+
+	// Fix up the path so its references map to the current world (important for PIE).
+	if (GEngine)
+	{
+		GEngine->NetworkRemapPath(NetDriver, RefPath);
+	}
+
+	return FindObject<UObject>(ANY_PACKAGE, *RefPath);
+};
+
+AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
+{
+	if (NetDriver->IsServer())
+	{
+		bool noop = true;
+	}
+	else
+	{
+		bool noop = false;
+	}
+
+	StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *StablePath));
+	if (StaticActor == nullptr)
+	{
+		UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find stably-named actor for entity %lld with path %s"), EntityId, *StablePath);
+		return nullptr;
+	}
+
+	if (!StaticActor->IsA(ActorClass))
+	{
+		UE_LOG(LogSpatialReceiver, Warning, TEXT("Found a stably-named actor for entity %lld with unexpected class (%s) at path %s, expected class %s"),
+			EntityId, *StaticActor->GetClass()->GetPathName(), *StablePath, *ActorClass->GetPathName());
+		return nullptr;
+	}
+
+	FString LevelPath = StaticActor->GetLevel()->GetPathName();
+	FString LevelPackagePath = StaticActor->GetLevel()->GetOutermost()->GetPathName();
+	if (GEngine)
+	{
+		GEngine->NetworkRemapPath(NetDriver, LevelPath);
+		GEngine->NetworkRemapPath(NetDriver, LevelPackagePath);
+	}
+	ULevel* OuterLevel = Cast<ULevel>(StaticFindObject(ULevel::StaticClass(), nullptr, *LevelPath));
+	if (OuterLevel == nullptr)
+	{
+		UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find level %s in which to spawn entity %lld. Deferring actor creation."), *LevelPath, EntityId);
+
+		FDeferredStablyNamedActorData DeferredStablyNamedActorData;
+		DeferredStablyNamedActorData.EntityId = EntityId;
+		DeferredStablyNamedActorData.ComponentDatas = ComponentDatas;
+
+		StablyNamedActorManager->DeferStablyNamedActorForLevel(LevelPackagePath, DeferredStablyNamedActorData);
+
+		bDidDeferCreation = true;
+		return nullptr;
+	}
+
+	if (!OuterLevel->GetWorld() || !OuterLevel->GetWorld()->IsGameWorld())
+	{
+		// If we've found a world and it isn't a game world, this means we're in the editor and the path wasn't changed to a PIE path,
+		// so we're trying to reference a level that isn't part of this world's streaming level set.
+		UE_LOG(LogSpatialReceiver, Error, TEXT("Found level %s in which to spawn entity %lld, but it wasn't a game world. This might mean the snapshot doesn't match the loaded level."),
+			*LevelPath, EntityId);
+		return nullptr;
+	}
+
+	UObject* NewOuter = ReResolveReference(StaticActor->GetOuter());
+	if (NewOuter == nullptr)
+	{
+		UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to resolve new outer for static actor %s"), *StaticActor->GetPathName());
+		return nullptr;
+	}
+
+	TSet<UObject*> ObjectsToIgnore;
+	for (UActorComponent* Component : StaticActor->GetComponents())
+	{
+		ObjectsToIgnore.Add(Component);
+	}
+	USceneComponent* RootComponent = StaticActor->GetRootComponent();
+
+	std::function<bool(UObject*, UProperty*, UObject*)> DoIgnorePredicate = [RootComponent, &ObjectsToIgnore](UObject* Object, UProperty* Property, UObject* ReferenceTarget) -> bool
+	{
+		if (Object->IsA(USceneComponent::StaticClass()) &&
+			Cast<USceneComponent>(Object) == RootComponent &&
+			Property->GetName().Contains(TEXT("AttachParent")))
+		{
+			// Specifically don't ignore AttachParent for the Actor's root component, since we don't want to duplicate those.
+			return false;
+		}
+		return ObjectsToIgnore.Contains(ReferenceTarget);
+	};
+
+	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
+	SubobjectToOffsetMap StaticSubobjectOffsets = improbable::CreateOffsetMapFromActor(StaticActor, Info);
+
+	// Tell StaticDuplicateObject to specifically use these objects instead of referencing them.
+	// Maps reference in StaticActor to desired reference
+	TMap<UObject*, UObject*> DuplicationSeed;
+	DuplicationSeed.Add(StaticActor->GetOuter(), NewOuter);
+	TMap<FOffsetPropertyPair, FUnrealObjectRef> UnresolvedReferences;
+	PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, 0, StaticActor, DoIgnorePredicate);
+	for (auto& SubobjectOffsetPair : StaticSubobjectOffsets)
+	{
+		PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, SubobjectOffsetPair.Value, SubobjectOffsetPair.Key, DoIgnorePredicate);
+	}
+
+	// Objects created within StaticDuplicateObjectEx.
+	TMap<UObject*, UObject*> CreatedObjects;
+
+	FObjectDuplicationParameters DupParams(StaticActor, NewOuter);
+	DupParams.DestName = StaticActor->GetFName();
+	DupParams.DuplicationSeed = DuplicationSeed;
+	DupParams.CreatedObjects = &CreatedObjects;
+	AActor* NewActor = Cast<AActor>(StaticDuplicateObjectEx(DupParams));
+	if (NewActor == nullptr)
+	{
+		UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new stably-named actor for entity %lld from template %s"), EntityId, *StaticActor->GetFullName());
+		return nullptr;
+	}
+
+	// TODO: check CreatedObjects for things that aren't subobjects
+
+	// Zero out any unresolved object references, since they will have been copied. The copies should be garbage collected after removing the reference.
+	// TODO: figure out how to force them not to be copied
+	if (UnresolvedReferences.Num() > 0)
+	{
+		for (auto OffsetPropertyPair : UnresolvedReferences)
+		{
+			uint32 SubobjectOffset = OffsetPropertyPair.Key.Key;
+			UProperty* Property = OffsetPropertyPair.Key.Value;
+			UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property);
+			if (ObjectProperty == nullptr)
+			{
+				// TODO: handle this better
+				UE_LOG(LogSpatialReceiver, Error, TEXT("Expected UObjectProperty for unresolved reference"));
+				continue;
+			}
+			UObject* Object = NewActor;
+			if (SubobjectOffset > 0)
+			{
+				Object = NewActor->GetDefaultSubobjectByName(Info->SubobjectInfo[SubobjectOffset]->SubobjectName);
+			}
+			void* RefPointerPointer = ObjectProperty->ContainerPtrToValuePtr<void>(Object);
+			ObjectProperty->SetObjectPropertyValue(RefPointerPointer, nullptr);
+		}
+	}
+	
+	NewActor->GetLevel()->Actors.Add(NewActor);
+	NewActor->GetLevel()->ActorsForGC.Add(NewActor);
+
+	FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+	FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+	FRotator SpawnRotation = Rotation->ToFRotator();
+
+	// TODO: owner, instigator, remote owned, nofail
+	NewActor->PostSpawnInitialize(FTransform(SpawnRotation, SpawnLocation), nullptr, nullptr, false, false, true);
+
+	// Initialize components after copying over their data from the map.
+	check(!NewActor->IsActorInitialized());
+	NewActor->PreInitializeComponents();
+	NewActor->InitializeComponents();
+	NewActor->PostInitializeComponents();
+	check(NewActor->IsActorInitialized());
+
+	World->AddNetworkActor(NewActor);
+
+	UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
+		*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
+
+	// Update the final transform for this actor to account for any differences in the static actor's scale, and to overwrite
+	// any position or rotation changes from the static actor.
+	StaticActor->UpdateComponentTransforms();
+	NewActor->UpdateComponentTransforms();
+	NewActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
+
+	// After all of the above, make sure the transforms within the actor are up to date.
+	NewActor->UpdateComponentTransforms();
+	NewActor->MarkComponentsRenderStateDirty();
+
+	return NewActor;
+}
+
+bool FSpatialActorCreator::CreateActorForEntity()
+{
+	improbable::Position* Position = StaticComponentView->GetComponentData<improbable::Position>(EntityId);
+	improbable::Rotation* Rotation = StaticComponentView->GetComponentData<improbable::Rotation>(EntityId);
+	improbable::UnrealMetadata* UnrealMetadata = StaticComponentView->GetComponentData<improbable::UnrealMetadata>(EntityId);
+
+	if (UnrealMetadata == nullptr)
+	{
+		// Not an Unreal entity
+		return false;
+	}
+
+	UClass* ActorClass = UnrealMetadata->GetNativeEntityClass();
+
+	if (ActorClass == nullptr)
+	{
+		// TODO: error
+		return false;
+	}
+
+	// Initial Singleton Actor replication is handled with GlobalStateManager::LinkExistingSingletonActors
+	if (NetDriver->IsServer() && ActorClass->HasAnySpatialClassFlags(SPATIALCLASS_Singleton))
+	{
+		return false;
+	}
+
+	UNetConnection* Connection = nullptr;
+	bool bDoingDeferredSpawn = false;
+
+	// If we're checking out a player controller, spawn it via "USpatialNetDriver::AcceptNewPlayer"
+	if (NetDriver->IsServer() && ActorClass->IsChildOf(APlayerController::StaticClass()))
+	{
+		checkf(!UnrealMetadata->OwnerWorkerAttribute.IsEmpty(), TEXT("A player controller entity must have an owner worker attribute."));
+
+		FString URLString = FURL().ToString();
+		URLString += TEXT("?workerAttribute=") + UnrealMetadata->OwnerWorkerAttribute;
+
+		Connection = NetDriver->AcceptNewPlayer(FURL(nullptr, *URLString, TRAVEL_Absolute), true);
+		check(Connection);
+
+		EntityActor = Connection->PlayerController;
+	}
+	else
+	{
+		UE_LOG(LogSpatialReceiver, Verbose, TEXT("Spawning a %s whilst checking out an entity."), *ActorClass->GetFullName());
+
+		if (EntityActor == nullptr && !UnrealMetadata->StaticPath.IsEmpty())
+		{
+			// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
+			// Note that this can fail and return a null actor.
+			EntityActor = CreateNewStablyNamedActor(*UnrealMetadata->StaticPath, Position, Rotation, ActorClass, EntityId);
+			if (EntityActor == nullptr && bDidDeferCreation)
+			{
+				// We've deferred creating this actor for now since its streaming level is not yet present.
+				return false;
+			}
+		}
+
+		if (EntityActor == nullptr)
+		{
+			EntityActor = CreateActor(Position, Rotation, ActorClass, true);
+
+			bDoingDeferredSpawn = true;
+		}
+
+		if (EntityActor == nullptr)
+		{
+			// If we've gotten this far and still don't have an actor, something has gone wrong, so early out.
+			UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to spawn an actor for entity %lld of class %s"), EntityId, *ActorClass->GetFullName());
+			return false;
+		}
+
+		// Don't have authority over Actor until SpatialOS delegates authority
+		EntityActor->Role = ROLE_SimulatedProxy;
+		EntityActor->RemoteRole = ROLE_Authority;
+
+		// Get the net connection for this actor.
+		if (NetDriver->IsServer())
+		{
+			// Currently, we just create an actor channel on the "catch-all" connection, then create a new actor channel once we check out the player controller
+			// and create a new connection. This is fine due to lazy actor channel creation in USpatialNetDriver::ServerReplicateActors. However, the "right" thing to do
+			// would be to make sure to create anything which depends on the PlayerController _after_ the PlayerController's connection is set up so we can use the right
+			// one here. We should revisit this after implementing working sets - UNR:411
+			Connection = NetDriver->GetSpatialOSNetConnection();
+		}
+		else
+		{
+			Connection = NetDriver->GetSpatialOSNetConnection();
+		}
+	}
+
+	// Set up actor channel.
+	USpatialPackageMapClient* SpatialPackageMap = Cast<USpatialPackageMapClient>(Connection->PackageMap);
+	Channel = Cast<USpatialActorChannel>(Connection->CreateChannel(CHTYPE_Actor, NetDriver->IsServer()));
+	if (!Channel)
+	{
+		UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to create an actor channel when receiving entity %lld. The actor will not be spawned."), EntityId);
+		EntityActor->Destroy(true);
+		return false;
+	}
+
+	// Add to entity registry.
+	EntityRegistry->AddToRegistry(EntityId, EntityActor);
+
+	FVector InitialLocation = improbable::Coordinates::ToFVector(Position->Coords);
+	FVector SpawnLocation = FRepMovement::RebaseOntoLocalOrigin(InitialLocation, World->OriginLocation);
+	FRotator SpawnRotation = Rotation->ToFRotator();
+	if (bDoingDeferredSpawn)
+	{
+		EntityActor->FinishSpawning(FTransform(SpawnRotation, SpawnLocation));
+	}
+
+	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
+	SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, improbable::CreateOffsetMapFromActor(EntityActor, Info));
+	Channel->SetChannelActor(EntityActor);
+
+	// TODO: move somewhere else?
+	for (TSharedPtr<improbable::Component>& Component : ComponentDatas)
+	{
+		AddComponentDataCallback.ExecuteIfBound(Component.Get());
+	}
+
+	return true;
+}
+
+void FSpatialActorCreator::FinalizeNewActor()
+{
+	if (!NetDriver->IsServer())
+	{
+		// Update interest on the entity's components after receiving initial component data (so Role and RemoteRole are properly set).
+		Sender->SendComponentInterest(EntityActor, EntityId);
+
+		// This is a bit of a hack unfortunately, among the core classes only PlayerController implements this function and it requires
+		// a player index. For now we don't support split screen, so the number is always 0.
+		if (EntityActor->IsA(APlayerController::StaticClass()))
+		{
+			uint8 PlayerIndex = 0;
+			// FInBunch takes size in bits not bytes
+			FInBunch Bunch(NetDriver->ServerConnection, &PlayerIndex, sizeof(PlayerIndex) * 8);
+			EntityActor->OnActorChannelOpen(Bunch, NetDriver->ServerConnection);
+		}
+		else
+		{
+			FInBunch Bunch(NetDriver->ServerConnection);
+			EntityActor->OnActorChannelOpen(Bunch, NetDriver->ServerConnection);
+		}
+
+	}
+
+	// Taken from PostNetInit
+	if (!EntityActor->HasActorBegunPlay())
+	{
+		EntityActor->DispatchBeginPlay();
+	}
+
+	EntityActor->UpdateOverlaps();
 }
 
 void USpatialReceiver::CreateDeferredStablyNamedActor(FDeferredStablyNamedActorData& DeferredStablyNamedActorData)
