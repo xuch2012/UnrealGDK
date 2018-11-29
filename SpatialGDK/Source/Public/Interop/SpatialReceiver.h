@@ -91,24 +91,24 @@ struct FPendingIncomingRPC
 	int64 CountBits;
 };
 
-struct FDeferredStablyNamedActorData {
+struct FDeferredStartupActorData {
 	Worker_EntityId EntityId;
 	TArray<TSharedPtr<improbable::Component>> ComponentDatas;
 };
 
-DECLARE_DELEGATE_OneParam(FCreateDeferredStablyNamedActorDelegate, FDeferredStablyNamedActorData&);
+DECLARE_DELEGATE_OneParam(FCreateDeferredStartupActorDelegate, FDeferredStartupActorData&);
 
 UCLASS()
-class UStablyNamedActorManager : public UObject {
+class USpatialStreamingLevelManager : public UObject {
 
 	GENERATED_BODY()
 
 public:
 	void Init(USpatialNetDriver* NetDriver);
 
-	void DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData);
+	void DeferStartupActorForLevel(const FString& LevelPath, const FDeferredStartupActorData& DeferredActorData);
 
-	FCreateDeferredStablyNamedActorDelegate& OnCreateDeferredStablyNamedActor() { return CreateDeferredStablyNamedActorDelegate; }
+	FCreateDeferredStartupActorDelegate& OnCreateDeferredStartupActor() { return CreateDeferredStartupActorDelegate; }
 
 private:
 	void LevelsChanged();
@@ -118,7 +118,7 @@ private:
 	TSet<FName> LoadedLevels;
 
 	// Level path -> actor data
-	TMultiMap<FName, FDeferredStablyNamedActorData> DeferredStablyNamedActorData;
+	TMultiMap<FName, FDeferredStartupActorData> DeferredStartupActorData;
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;
@@ -126,7 +126,7 @@ private:
 	UPROPERTY()
 	UWorld* World;
 
-	FCreateDeferredStablyNamedActorDelegate CreateDeferredStablyNamedActorDelegate;
+	FCreateDeferredStartupActorDelegate CreateDeferredStartupActorDelegate;
 };
 
 DECLARE_DELEGATE_OneParam(FAddComponentDataDelegate, improbable::Component*);
@@ -143,13 +143,13 @@ private:
 	UEntityRegistry* EntityRegistry;
 	USpatialTypebindingManager* TypebindingManager;
 	USpatialSender* Sender;
-	UStablyNamedActorManager* StablyNamedActorManager;
+	USpatialStreamingLevelManager* StreamingLevelManager;
 
 	FAddComponentDataDelegate AddComponentDataCallback;
 	TArray<TSharedPtr<improbable::Component>> ComponentDatas;
 
 public:
-	AActor* StaticActor = nullptr;
+	AActor* TemplateActor = nullptr;
 	AActor* EntityActor = nullptr;
 	USpatialActorChannel* Channel = nullptr;
 
@@ -159,7 +159,7 @@ public:
 	FSpatialActorCreator(
 		Worker_EntityId EntityId,
 		USpatialNetDriver* NetDriver,
-		UStablyNamedActorManager* StablyNamedActorManager);
+		USpatialStreamingLevelManager* StreamingLevelManager);
 
 	void SetComponentDatas(const TArray<TSharedPtr<improbable::Component>> ComponentDatas) { this->ComponentDatas = ComponentDatas; }
 
@@ -172,7 +172,7 @@ public:
 	UObject* ReResolveReference(UObject* Object);
 
 	// Note that this will set bDidDeferCreation to true if the streaming level hasn't been streamed in yet.
-	AActor* CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId);
+	AActor* CreateNewStartupActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId);
 
 	bool CreateActorForEntity();
 
@@ -223,7 +223,7 @@ private:
 	void EnterCriticalSection();
 	void LeaveCriticalSection();
 
-	void CreateDeferredStablyNamedActor(FDeferredStablyNamedActorData& DeferredStablyNamedActorData);
+	void CreateDeferredStartupActor(FDeferredStartupActorData& DeferredStartupActorData);
 	void ReceiveActor(Worker_EntityId EntityId);
 	void RemoveActor(Worker_EntityId EntityId);
 
@@ -255,7 +255,7 @@ private:
 	friend T* GetComponentData(USpatialReceiver& Receiver, Worker_EntityId EntityId);
 
 	UPROPERTY()
-	UStablyNamedActorManager *StablyNamedActorManager;
+	USpatialStreamingLevelManager *StartupActorManager;
 
 	UPROPERTY()
 	USpatialNetDriver* NetDriver;

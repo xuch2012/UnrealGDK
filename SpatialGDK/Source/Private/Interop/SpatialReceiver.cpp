@@ -56,12 +56,12 @@ void USpatialReceiver::Init(USpatialNetDriver* InNetDriver, FTimerManager* InTim
 	GlobalStateManager = InNetDriver->GlobalStateManager;
 	TimerManager = InTimerManager;
 
-	StablyNamedActorManager = NewObject<UStablyNamedActorManager>();
-	StablyNamedActorManager->Init(NetDriver);
-	StablyNamedActorManager->OnCreateDeferredStablyNamedActor().BindLambda([this](FDeferredStablyNamedActorData& DeferredStablyNamedActorData)
+	StartupActorManager = NewObject<USpatialStreamingLevelManager>();
+	StartupActorManager->Init(NetDriver);
+	StartupActorManager->OnCreateDeferredStartupActor().BindLambda([this](FDeferredStartupActorData& DeferredStartupActorData)
 	{
 		// TODO: make sure we haven't gotten the remove entity op
-		CreateDeferredStablyNamedActor(DeferredStablyNamedActorData);
+		CreateDeferredStartupActor(DeferredStartupActorData);
 	});
 }
 
@@ -253,7 +253,7 @@ void USpatialReceiver::HandleActorAuthority(Worker_AuthorityChangeOp& Op)
 	}
 }
 
-void UStablyNamedActorManager::Init(USpatialNetDriver* NetDriver)
+void USpatialStreamingLevelManager::Init(USpatialNetDriver* NetDriver)
 {
 	this->NetDriver = NetDriver;
 	this->World = NetDriver->GetWorld();
@@ -264,30 +264,30 @@ void UStablyNamedActorManager::Init(USpatialNetDriver* NetDriver)
 	});
 }
 
-void UStablyNamedActorManager::DeferStablyNamedActorForLevel(const FString& LevelPath, const FDeferredStablyNamedActorData& DeferredActorData)
+void USpatialStreamingLevelManager::DeferStartupActorForLevel(const FString& LevelPath, const FDeferredStartupActorData& DeferredActorData)
 {
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG deferring spawning actor %lld for level %s"),
 		DeferredActorData.EntityId, *LevelPath);
-	DeferredStablyNamedActorData.Add(FName(*LevelPath), DeferredActorData);
+	DeferredStartupActorData.Add(FName(*LevelPath), DeferredActorData);
 }
 
-void UStablyNamedActorManager::HandleLevelAdded(const FName& LevelName)
+void USpatialStreamingLevelManager::HandleLevelAdded(const FName& LevelName)
 {
 	UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG Level added: %s"), *LevelName.ToString());
 
-	TArray<FDeferredStablyNamedActorData> LevelDeferredActors;
-	DeferredStablyNamedActorData.MultiFind(LevelName, LevelDeferredActors);
-	for (FDeferredStablyNamedActorData& DeferredActor : LevelDeferredActors)
+	TArray<FDeferredStartupActorData> LevelDeferredActors;
+	DeferredStartupActorData.MultiFind(LevelName, LevelDeferredActors);
+	for (FDeferredStartupActorData& DeferredActor : LevelDeferredActors)
 	{
 		UE_LOG(LogSpatialReceiver, Log, TEXT("DAVEDEBUG handling deferred stably named actor %lld for level %s"),
 			DeferredActor.EntityId,
 			*LevelName.ToString());
-		CreateDeferredStablyNamedActorDelegate.ExecuteIfBound(DeferredActor);
+		CreateDeferredStartupActorDelegate.ExecuteIfBound(DeferredActor);
 	}
-	DeferredStablyNamedActorData.Remove(LevelName);
+	DeferredStartupActorData.Remove(LevelName);
 }
 
-void UStablyNamedActorManager::LevelsChanged()
+void USpatialStreamingLevelManager::LevelsChanged()
 {
 	TSet<FName> NewLoadedLevels;
 	for (ULevel* Level : World->GetLevels())
@@ -308,10 +308,10 @@ void UStablyNamedActorManager::LevelsChanged()
 FSpatialActorCreator::FSpatialActorCreator(
 	Worker_EntityId EntityId,
 	USpatialNetDriver* NetDriver,
-	UStablyNamedActorManager* StablyNamedActorManager)
+	USpatialStreamingLevelManager* StreamingLevelManager)
 	: EntityId(EntityId)
 	, NetDriver(NetDriver)
-	, StablyNamedActorManager(StablyNamedActorManager)
+	, StreamingLevelManager(StreamingLevelManager)
 {
 	World = NetDriver->GetWorld();
 	StaticComponentView = NetDriver->StaticComponentView;
@@ -432,7 +432,7 @@ UObject* FSpatialActorCreator::ReResolveReference(UObject* Object)
 	return FindObject<UObject>(ANY_PACKAGE, *RefPath);
 };
 
-AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
+AActor* FSpatialActorCreator::CreateNewStartupActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId)
 {
 	if (NetDriver->IsServer())
 	{
@@ -443,22 +443,22 @@ AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePat
 		bool noop = false;
 	}
 
-	StaticActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *StablePath));
-	if (StaticActor == nullptr)
+	TemplateActor = Cast<AActor>(StaticLoadObject(AActor::StaticClass(), nullptr, *StablePath));
+	if (TemplateActor == nullptr)
 	{
 		UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find stably-named actor for entity %lld with path %s"), EntityId, *StablePath);
 		return nullptr;
 	}
 
-	if (!StaticActor->IsA(ActorClass))
+	if (!TemplateActor->IsA(ActorClass))
 	{
 		UE_LOG(LogSpatialReceiver, Warning, TEXT("Found a stably-named actor for entity %lld with unexpected class (%s) at path %s, expected class %s"),
-			EntityId, *StaticActor->GetClass()->GetPathName(), *StablePath, *ActorClass->GetPathName());
+			EntityId, *TemplateActor->GetClass()->GetPathName(), *StablePath, *ActorClass->GetPathName());
 		return nullptr;
 	}
 
-	FString LevelPath = StaticActor->GetLevel()->GetPathName();
-	FString LevelPackagePath = StaticActor->GetLevel()->GetOutermost()->GetPathName();
+	FString LevelPath = TemplateActor->GetLevel()->GetPathName();
+	FString LevelPackagePath = TemplateActor->GetLevel()->GetOutermost()->GetPathName();
 	if (GEngine)
 	{
 		GEngine->NetworkRemapPath(NetDriver, LevelPath);
@@ -469,11 +469,11 @@ AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePat
 	{
 		UE_LOG(LogSpatialReceiver, Warning, TEXT("Failed to find level %s in which to spawn entity %lld. Deferring actor creation."), *LevelPath, EntityId);
 
-		FDeferredStablyNamedActorData DeferredStablyNamedActorData;
-		DeferredStablyNamedActorData.EntityId = EntityId;
-		DeferredStablyNamedActorData.ComponentDatas = ComponentDatas;
+		FDeferredStartupActorData DeferredStartupActorData;
+		DeferredStartupActorData.EntityId = EntityId;
+		DeferredStartupActorData.ComponentDatas = ComponentDatas;
 
-		StablyNamedActorManager->DeferStablyNamedActorForLevel(LevelPackagePath, DeferredStablyNamedActorData);
+		StreamingLevelManager->DeferStartupActorForLevel(LevelPackagePath, DeferredStartupActorData);
 
 		bDidDeferCreation = true;
 		return nullptr;
@@ -488,19 +488,19 @@ AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePat
 		return nullptr;
 	}
 
-	UObject* NewOuter = ReResolveReference(StaticActor->GetOuter());
+	UObject* NewOuter = ReResolveReference(TemplateActor->GetOuter());
 	if (NewOuter == nullptr)
 	{
-		UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to resolve new outer for static actor %s"), *StaticActor->GetPathName());
+		UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to resolve new outer for static actor %s"), *TemplateActor->GetPathName());
 		return nullptr;
 	}
 
 	TSet<UObject*> ObjectsToIgnore;
-	for (UActorComponent* Component : StaticActor->GetComponents())
+	for (UActorComponent* Component : TemplateActor->GetComponents())
 	{
 		ObjectsToIgnore.Add(Component);
 	}
-	USceneComponent* RootComponent = StaticActor->GetRootComponent();
+	USceneComponent* RootComponent = TemplateActor->GetRootComponent();
 
 	std::function<bool(UObject*, UProperty*, UObject*)> DoIgnorePredicate = [RootComponent, &ObjectsToIgnore](UObject* Object, UProperty* Property, UObject* ReferenceTarget) -> bool
 	{
@@ -515,14 +515,14 @@ AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePat
 	};
 
 	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
-	SubobjectToOffsetMap StaticSubobjectOffsets = improbable::CreateOffsetMapFromActor(StaticActor, Info);
+	SubobjectToOffsetMap StaticSubobjectOffsets = improbable::CreateOffsetMapFromActor(TemplateActor, Info);
 
 	// Tell StaticDuplicateObject to specifically use these objects instead of referencing them.
 	// Maps reference in StaticActor to desired reference
 	TMap<UObject*, UObject*> DuplicationSeed;
-	DuplicationSeed.Add(StaticActor->GetOuter(), NewOuter);
+	DuplicationSeed.Add(TemplateActor->GetOuter(), NewOuter);
 	TMap<FOffsetPropertyPair, FUnrealObjectRef> UnresolvedReferences;
-	PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, 0, StaticActor, DoIgnorePredicate);
+	PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, 0, TemplateActor, DoIgnorePredicate);
 	for (auto& SubobjectOffsetPair : StaticSubobjectOffsets)
 	{
 		PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, SubobjectOffsetPair.Value, SubobjectOffsetPair.Key, DoIgnorePredicate);
@@ -531,14 +531,14 @@ AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePat
 	// Objects created within StaticDuplicateObjectEx.
 	TMap<UObject*, UObject*> CreatedObjects;
 
-	FObjectDuplicationParameters DupParams(StaticActor, NewOuter);
-	DupParams.DestName = StaticActor->GetFName();
+	FObjectDuplicationParameters DupParams(TemplateActor, NewOuter);
+	DupParams.DestName = TemplateActor->GetFName();
 	DupParams.DuplicationSeed = DuplicationSeed;
 	DupParams.CreatedObjects = &CreatedObjects;
 	AActor* NewActor = Cast<AActor>(StaticDuplicateObjectEx(DupParams));
 	if (NewActor == nullptr)
 	{
-		UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new stably-named actor for entity %lld from template %s"), EntityId, *StaticActor->GetFullName());
+		UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to create new stably-named actor for entity %lld from template %s"), EntityId, *TemplateActor->GetFullName());
 		return nullptr;
 	}
 
@@ -589,13 +589,13 @@ AActor* FSpatialActorCreator::CreateNewStablyNamedActor(const FString& StablePat
 	World->AddNetworkActor(NewActor);
 
 	UE_LOG(LogSpatialReceiver, Log, TEXT("Created actor %s from stably-named actor %s for entity %lld"),
-		*NewActor->GetFName().ToString(), *StaticActor->GetFullName(), EntityId);
+		*NewActor->GetFName().ToString(), *TemplateActor->GetFullName(), EntityId);
 
 	// Update the final transform for this actor to account for any differences in the static actor's scale, and to overwrite
 	// any position or rotation changes from the static actor.
-	StaticActor->UpdateComponentTransforms();
+	TemplateActor->UpdateComponentTransforms();
 	NewActor->UpdateComponentTransforms();
-	NewActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, StaticActor->GetActorScale3D()));
+	NewActor->SetActorTransform(FTransform(SpawnRotation, SpawnLocation, TemplateActor->GetActorScale3D()));
 
 	// After all of the above, make sure the transforms within the actor are up to date.
 	NewActor->UpdateComponentTransforms();
@@ -654,7 +654,7 @@ bool FSpatialActorCreator::CreateActorForEntity()
 		{
 			// If this actor has a stable path, attempt to load the object from the map file to grab its initial data.
 			// Note that this can fail and return a null actor.
-			EntityActor = CreateNewStablyNamedActor(*UnrealMetadata->StaticPath, Position, Rotation, ActorClass, EntityId);
+			EntityActor = CreateNewStartupActor(*UnrealMetadata->StaticPath, Position, Rotation, ActorClass, EntityId);
 			if (EntityActor == nullptr && bDidDeferCreation)
 			{
 				// We've deferred creating this actor for now since its streaming level is not yet present.
@@ -762,15 +762,15 @@ void FSpatialActorCreator::FinalizeNewActor()
 	EntityActor->UpdateOverlaps();
 }
 
-void USpatialReceiver::CreateDeferredStablyNamedActor(FDeferredStablyNamedActorData& DeferredStablyNamedActorData)
+void USpatialReceiver::CreateDeferredStartupActor(FDeferredStartupActorData& DeferredStartupActorData)
 {
 	checkf(World, TEXT("We should have a world whilst processing ops."));
 	check(NetDriver);
 
-	Worker_EntityId EntityId = DeferredStablyNamedActorData.EntityId;
+	Worker_EntityId EntityId = DeferredStartupActorData.EntityId;
 
-	FSpatialActorCreator ActorCreator(EntityId, NetDriver, StablyNamedActorManager);
-	ActorCreator.SetComponentDatas(DeferredStablyNamedActorData.ComponentDatas);
+	FSpatialActorCreator ActorCreator(EntityId, NetDriver, StartupActorManager);
+	ActorCreator.SetComponentDatas(DeferredStartupActorData.ComponentDatas);
 
 	// TODO: this is really ugly
 	ActorCreator.AddComponentDataDelegate().BindLambda([this, EntityId, &ActorCreator](improbable::Component* Component)
@@ -837,7 +837,7 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 			}
 		}
 
-		FSpatialActorCreator ActorCreator(EntityId, NetDriver, StablyNamedActorManager);
+		FSpatialActorCreator ActorCreator(EntityId, NetDriver, StartupActorManager);
 		ActorCreator.SetComponentDatas(ComponentDatas);
 
 		// TODO: this is really ugly
