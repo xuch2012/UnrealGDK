@@ -132,6 +132,7 @@ private:
 DECLARE_DELEGATE_OneParam(FAddComponentDataDelegate, improbable::Component*);
 
 using FOffsetPropertyPair = TPair<uint32, UProperty*>;
+using FPropertyReferencePair = TPair<UProperty*, FUnrealObjectRef>;
 
 class FSpatialActorCreator {
 private:
@@ -147,6 +148,7 @@ private:
 
 	FAddComponentDataDelegate AddComponentDataCallback;
 	TArray<TSharedPtr<improbable::Component>> ComponentDatas;
+	TMultiMap<uint32, FPropertyReferencePair> UnresolvedReferences;
 
 public:
 	AActor* TemplateActor = nullptr;
@@ -167,7 +169,7 @@ public:
 
 	AActor* CreateActor(improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, bool bDeferred);
 
-	void PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMap<FOffsetPropertyPair, FUnrealObjectRef>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate);
+	void PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMultiMap<uint32, FPropertyReferencePair>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate);
 
 	UObject* ReResolveReference(UObject* Object);
 
@@ -175,7 +177,8 @@ public:
 	AActor* CreateNewStartupActor(const FString& StablePath, improbable::Position* Position, improbable::Rotation* Rotation, UClass* ActorClass, Worker_EntityId EntityId);
 
 	bool CreateActorForEntity();
-
+	bool RegisterActor(TMap<FChannelObjectPair, FObjectReferencesMap>& UnresolvedRefsMap, TArray<TTuple<FChannelObjectPair, TSet<FUnrealObjectRef>>>& IncomingRepUpdates);
+	bool ApplyAllComponentDatas();
 	void FinalizeNewActor();
 };
 

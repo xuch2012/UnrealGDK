@@ -24,7 +24,8 @@ public:
 	FNetworkGUID ResolveEntityActor(AActor* Actor, Worker_EntityId EntityId, const SubobjectToOffsetMap& SubobjectToOffset);
 	void RemoveEntityActor(Worker_EntityId EntityId);
 
-	FNetworkGUID ResolveStablyNamedObject(UObject* Object);
+	// SubobjectToOffset is optional. If present, it will resolve all subobjects too.
+	FNetworkGUID ResolveStablyNamedObject(UObject* Object, const SubobjectToOffsetMap* SubobjectToOffset = nullptr);
 	
 	FUnrealObjectRef GetUnrealObjectRefFromNetGUID(const FNetworkGUID& NetGUID) const;
 	FNetworkGUID GetNetGUIDFromUnrealObjectRef(const FUnrealObjectRef& ObjectRef) const;
@@ -49,7 +50,7 @@ public:
 	void RemoveEntityNetGUID(Worker_EntityId EntityId);
 	void RemoveNetGUID(const FNetworkGUID& NetGUID);
 
-	FNetworkGUID AssignNewStablyNamedObjectNetGUID(UObject* Object);
+	FNetworkGUID AssignNewStablyNamedObjectNetGUID(UObject* Object, uint32 Offset = 0);
 	
 	FNetworkGUID GetNetGUIDFromUnrealObjectRef(const FUnrealObjectRef& ObjectRef);
 	FUnrealObjectRef GetUnrealObjectRefFromNetGUID(const FNetworkGUID& NetGUID) const;

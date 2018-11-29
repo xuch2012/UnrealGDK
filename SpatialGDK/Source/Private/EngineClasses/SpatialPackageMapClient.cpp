@@ -72,10 +72,33 @@ void USpatialPackageMapClient::RemoveEntityActor(Worker_EntityId EntityId)
 	}
 }
 
-FNetworkGUID USpatialPackageMapClient::ResolveStablyNamedObject(UObject* Object)
+FNetworkGUID USpatialPackageMapClient::ResolveStablyNamedObject(UObject* Object, const SubobjectToOffsetMap* SubobjectToOffset)
 {
 	FSpatialNetGUIDCache* SpatialGuidCache = static_cast<FSpatialNetGUIDCache*>(GuidCache.Get());
-	return SpatialGuidCache->AssignNewStablyNamedObjectNetGUID(Object);
+	FNetworkGUID NetGUID = SpatialGuidCache->GetNetGUID(Object);
+
+	// Check we haven't already assigned a NetGUID to this object.
+	if (!NetGUID.IsValid())
+	{
+		NetGUID = SpatialGuidCache->AssignNewStablyNamedObjectNetGUID(Object);
+	}
+
+	if (SubobjectToOffset != nullptr)
+	{
+		// Makes sure the actor's subobjects have NetGUIDs too.
+		for (auto& Pair : *SubobjectToOffset)
+		{
+			UObject* Subobject = Pair.Key;
+			uint32 Offset = Pair.Value;
+			FNetworkGUID SubobjectNetGUID = SpatialGuidCache->GetNetGUID(Subobject);
+			if (!SubobjectNetGUID.IsValid())
+			{
+				SpatialGuidCache->AssignNewStablyNamedObjectNetGUID(Subobject, Offset);
+			}
+		}
+	}
+
+	return NetGUID;
 }
 
 FUnrealObjectRef USpatialPackageMapClient::GetUnrealObjectRefFromNetGUID(const FNetworkGUID & NetGUID) const
@@ -184,7 +207,7 @@ FNetworkGUID FSpatialNetGUIDCache::AssignNewEntityActorNetGUID(AActor* Actor, co
 // Recursively assign netguids to the outer chain of a UObject. Then associate them with their Spatial representation (FUnrealObjectRef)
 // This is required in order to be able to refer to a non-replicated stably named UObject.
 // Dynamically spawned actors and references to their subobjects do not go through this codepath.
-FNetworkGUID FSpatialNetGUIDCache::AssignNewStablyNamedObjectNetGUID(UObject* Object)
+FNetworkGUID FSpatialNetGUIDCache::AssignNewStablyNamedObjectNetGUID(UObject* Object, uint32 Offset)
 {
 	FNetworkGUID NetGUID = GetOrAssignNetGUID_SpatialGDK(Object);
 	FUnrealObjectRef ExistingObjRef = GetUnrealObjectRefFromNetGUID(NetGUID);
@@ -201,8 +224,19 @@ FNetworkGUID FSpatialNetGUIDCache::AssignNewStablyNamedObjectNetGUID(UObject* Ob
 		OuterGUID = AssignNewStablyNamedObjectNetGUID(OuterObject);
 	}
 
-	FUnrealObjectRef StablyNamedObjRef(0, 0, Object->GetFName().ToString(), (OuterGUID.IsValid() && !OuterGUID.IsDefault()) ? GetUnrealObjectRefFromNetGUID(OuterGUID) : FUnrealObjectRef());
+	FUnrealObjectRef StablyNamedObjRef(0, Offset, Object->GetFName().ToString(), (OuterGUID.IsValid() && !OuterGUID.IsDefault()) ? GetUnrealObjectRefFromNetGUID(OuterGUID) : FUnrealObjectRef());
 	RegisterObjectRef(NetGUID, StablyNamedObjRef);
+
+	USpatialNetDriver* SpatialNetDriver = Cast<USpatialNetDriver>(Driver);
+	USpatialReceiver* Receiver = SpatialNetDriver->Receiver;
+
+	// This will be null when being used in the snapshot generator
+#if WITH_EDITOR
+	if (Receiver != nullptr)
+#endif
+	{
+		Receiver->ResolvePendingOperations(Object, StablyNamedObjRef);
+	}
 
 	return NetGUID;
 }

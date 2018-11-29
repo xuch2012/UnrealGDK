@@ -344,7 +344,7 @@ AActor* FSpatialActorCreator::CreateActor(improbable::Position* Position, improb
 	return NewActor;
 }
 
-void FSpatialActorCreator::PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMap<FOffsetPropertyPair, FUnrealObjectRef>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate)
+void FSpatialActorCreator::PopulateDuplicationSeed(TMap<UObject*, UObject*>& DuplicationSeed, TMultiMap<uint32, FPropertyReferencePair>& UnresolvedReferences, uint32 ObjectOffset, UObject* Object, std::function<bool(UObject*, UProperty*, UObject*)>& DoIgnorePredicate)
 {
 	for (TFieldIterator<UProperty> PropertyIter(Object->GetClass()); PropertyIter; ++PropertyIter)
 	{
@@ -391,10 +391,10 @@ void FSpatialActorCreator::PopulateDuplicationSeed(TMap<UObject*, UObject*>& Dup
 				else if (SourceValue->IsA(AActor::StaticClass()) && Cast<AActor>(SourceValue)->GetIsReplicated())
 				{
 					// We've failed to resolve a reference to a replicated actor, which means it hasn't come off the wire yet.
-					// TODO: create full object ref with path
-					FUnrealObjectRef UnresolvedRef;
-					UnresolvedRef.Path = RefPath;
-					UnresolvedReferences.Add(FOffsetPropertyPair(ObjectOffset, Property), UnresolvedRef);
+					USpatialPackageMapClient* SpatialPackageMap = Cast<USpatialPackageMapClient>(NetDriver->PackageMap);
+					FNetworkGUID NetGUID = SpatialPackageMap->ResolveStablyNamedObject(SourceValue);
+					FUnrealObjectRef UnresolvedRef = SpatialPackageMap->GetUnrealObjectRefFromNetGUID(NetGUID);
+					UnresolvedReferences.Add(ObjectOffset, FPropertyReferencePair(Property, UnresolvedRef));
 					UE_LOG(LogSpatialReceiver, Error, TEXT("Failed to re-resolve reference to replicated actor for entity %lld for property %s in static actor %s value in static actor: %s"),
 						EntityId,
 						*Property->GetPathName(),
@@ -521,7 +521,6 @@ AActor* FSpatialActorCreator::CreateNewStartupActor(const FString& StablePath, i
 	// Maps reference in StaticActor to desired reference
 	TMap<UObject*, UObject*> DuplicationSeed;
 	DuplicationSeed.Add(TemplateActor->GetOuter(), NewOuter);
-	TMap<FOffsetPropertyPair, FUnrealObjectRef> UnresolvedReferences;
 	PopulateDuplicationSeed(DuplicationSeed, UnresolvedReferences, 0, TemplateActor, DoIgnorePredicate);
 	for (auto& SubobjectOffsetPair : StaticSubobjectOffsets)
 	{
@@ -548,24 +547,32 @@ AActor* FSpatialActorCreator::CreateNewStartupActor(const FString& StablePath, i
 	// TODO: figure out how to force them not to be copied
 	if (UnresolvedReferences.Num() > 0)
 	{
-		for (auto OffsetPropertyPair : UnresolvedReferences)
+		// Note that in this context, "subobjects" includes the actor as well as all subobjects. Actor has offset == 0.
+		TArray<uint32> SubobjectOffsets;
+		UnresolvedReferences.GetKeys(SubobjectOffsets);
+		for (uint32 SubobjectOffset : SubobjectOffsets)
 		{
-			uint32 SubobjectOffset = OffsetPropertyPair.Key.Key;
-			UProperty* Property = OffsetPropertyPair.Key.Value;
-			UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property);
-			if (ObjectProperty == nullptr)
-			{
-				// TODO: handle this better
-				UE_LOG(LogSpatialReceiver, Error, TEXT("Expected UObjectProperty for unresolved reference"));
-				continue;
-			}
 			UObject* Object = NewActor;
 			if (SubobjectOffset > 0)
 			{
 				Object = NewActor->GetDefaultSubobjectByName(Info->SubobjectInfo[SubobjectOffset]->SubobjectName);
 			}
-			void* RefPointerPointer = ObjectProperty->ContainerPtrToValuePtr<void>(Object);
-			ObjectProperty->SetObjectPropertyValue(RefPointerPointer, nullptr);
+
+			TArray<FPropertyReferencePair> PropertyReferencePairs;
+			UnresolvedReferences.MultiFind(SubobjectOffset, PropertyReferencePairs);
+			for (const FPropertyReferencePair& PropertyReferencePair : PropertyReferencePairs)
+			{
+				UProperty* Property = PropertyReferencePair.Key;
+				UObjectProperty* ObjectProperty = Cast<UObjectProperty>(Property);
+				if (ObjectProperty == nullptr)
+				{
+					// TODO: handle this better
+					UE_LOG(LogSpatialReceiver, Error, TEXT("Expected UObjectProperty for unresolved reference"));
+					continue;
+				}
+				void* RefPointerPointer = ObjectProperty->ContainerPtrToValuePtr<void>(Object);
+				ObjectProperty->SetObjectPropertyValue(RefPointerPointer, nullptr);
+			}
 		}
 	}
 	
@@ -716,11 +723,74 @@ bool FSpatialActorCreator::CreateActorForEntity()
 		EntityActor->FinishSpawning(FTransform(SpawnRotation, SpawnLocation));
 	}
 
-	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(ActorClass);
-	SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, improbable::CreateOffsetMapFromActor(EntityActor, Info));
+	return true;
+}
+
+// TODO: rename this method
+bool FSpatialActorCreator::RegisterActor(TMap<FChannelObjectPair, FObjectReferencesMap>& UnresolvedRefsMap, TArray<TTuple<FChannelObjectPair, TSet<FUnrealObjectRef>>>& IncomingRepUpdates)
+{
+	FClassInfo* Info = TypebindingManager->FindClassInfoByClass(EntityActor->GetClass());
+	USpatialPackageMapClient* SpatialPackageMap = Cast<USpatialPackageMapClient>(NetDriver->PackageMap);
+
+	if (TemplateActor)
+	{
+		if (UnresolvedReferences.Num() > 0)
+		{
+			// Note that in this context, "subobjects" includes the actor as well as all subobjects. Actor has offset == 0.
+			TArray<uint32> SubobjectOffsets;
+			UnresolvedReferences.GetKeys(SubobjectOffsets);
+			for (uint32 SubobjectOffset : SubobjectOffsets)
+			{
+				TSet<FUnrealObjectRef> SubobjectUnresolvedRefs;
+
+				UObject* Object = EntityActor;
+				if (SubobjectOffset > 0)
+				{
+					Object = EntityActor->GetDefaultSubobjectByName(Info->SubobjectInfo[SubobjectOffset]->SubobjectName);
+				}
+				FChannelObjectPair ChannelObjectPair(Channel, Object);
+				FObjectReferencesMap& RefMap = UnresolvedRefsMap.FindOrAdd(ChannelObjectPair);
+
+				TArray<FPropertyReferencePair> PropertyReferencePairs;
+				UnresolvedReferences.MultiFind(SubobjectOffset, PropertyReferencePairs);
+				for (const FPropertyReferencePair& PropertyReferencePair : PropertyReferencePairs)
+				{
+					UProperty* Property = PropertyReferencePair.Key;
+					if (!Property->IsA(UObjectProperty::StaticClass()))
+					{
+						// TODO: handle this better
+						UE_LOG(LogSpatialReceiver, Error, TEXT("Expected UObjectProperty for unresolved reference"));
+						continue;
+					}
+
+					// TODO: handle arrays
+					int32 PropertyOffset = Property->GetOffset_ForGC();
+					RefMap.Add(PropertyOffset, FObjectReferences(PropertyReferencePair.Value, /* ParentIndex */ -1, Property));
+					SubobjectUnresolvedRefs.Add(PropertyReferencePair.Value);
+				}
+
+				IncomingRepUpdates.Add(MakeTuple(ChannelObjectPair, SubobjectUnresolvedRefs));
+			}
+		}
+
+		SubobjectToOffsetMap SubobjectToOffset = improbable::CreateOffsetMapFromActor(EntityActor, Info);
+
+		// TODO: swap these to get the real functionality
+		//SpatialPackageMap->ResolveStablyNamedObject(EntityActor, &SubobjectToOffset);
+		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, SubobjectToOffset);
+	}
+	else
+	{  // Not a static actor.
+		SpatialPackageMap->ResolveEntityActor(EntityActor, EntityId, improbable::CreateOffsetMapFromActor(EntityActor, Info));
+	}
+
 	Channel->SetChannelActor(EntityActor);
 
-	// TODO: move somewhere else?
+	return true;
+}
+
+bool FSpatialActorCreator::ApplyAllComponentDatas()
+{
 	for (TSharedPtr<improbable::Component>& Component : ComponentDatas)
 	{
 		AddComponentDataCallback.ExecuteIfBound(Component.Get());
@@ -783,7 +853,23 @@ void USpatialReceiver::CreateDeferredStartupActor(FDeferredStartupActorData& Def
 		// Failed, early-outed, or deferred. Error will have already been printed.
 		return;
 	}
-
+	TArray<TPair<FChannelObjectPair, TSet<FUnrealObjectRef>>> IncomingRepUpdates;
+	if (!ActorCreator.RegisterActor(UnresolvedRefsMap, IncomingRepUpdates))
+	{
+		// Failed, early-outed, or deferred. Error will have already been printed.
+		return;
+	}
+	for (auto& Pair : IncomingRepUpdates)
+	{
+		// FindChecked here because if the key does not exist in this map, something has gone wrong.
+		FObjectReferencesMap& RefMap = UnresolvedRefsMap.FindChecked(Pair.Key);
+		QueueIncomingRepUpdates(Pair.Key, RefMap, Pair.Value);
+	}
+	if (!ActorCreator.ApplyAllComponentDatas())
+	{
+		// Failed, early-outed, or deferred. Error will have already been printed.
+		return;
+	}
 	ActorCreator.FinalizeNewActor();
 }
 
@@ -851,7 +937,23 @@ void USpatialReceiver::ReceiveActor(Worker_EntityId EntityId)
 			// Failed, early-outed, or deferred. Error will have already been printed.
 			return;
 		}
-
+		TArray<TPair<FChannelObjectPair, TSet<FUnrealObjectRef>>> IncomingRepUpdates;
+		if (!ActorCreator.RegisterActor(UnresolvedRefsMap, IncomingRepUpdates))
+		{
+			// Failed, early-outed, or deferred. Error will have already been printed.
+			return;
+		}
+		for (auto& Pair : IncomingRepUpdates)
+		{
+			// FindChecked here because if the key does not exist in this map, something has gone wrong.
+			FObjectReferencesMap& RefMap = UnresolvedRefsMap.FindChecked(Pair.Key);
+			QueueIncomingRepUpdates(Pair.Key, RefMap, Pair.Value);
+		}
+		if (!ActorCreator.ApplyAllComponentDatas())
+		{
+			// Failed, early-outed, or deferred. Error will have already been printed.
+			return;
+		}
 		ActorCreator.FinalizeNewActor();
 	}
 }
