@@ -310,6 +310,10 @@ int64 USpatialActorChannel::ReplicateActor()
 		{
 			Sender->SendCreateEntityRequest(this);
 
+#if !UE_BUILD_SHIPPING
+			++NetDriver->SpatialNetDriverStats.NumNewActorsReplicated;
+#endif
+
 			// Since we've tried to create this Actor in Spatial, we no longer have authority over the actor since it hasn't been delegated to us.
 			Actor->Role = ROLE_SimulatedProxy;
 			Actor->RemoteRole = ROLE_Authority;

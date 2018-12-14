@@ -48,6 +48,9 @@ void USpatialDispatcher::ProcessOps(Worker_OpList* OpList)
 		case WORKER_OP_TYPE_REMOVE_COMPONENT:
 			break;
 		case WORKER_OP_TYPE_COMPONENT_UPDATE:
+#if !UE_BUILD_SHIPPING
+			++NetDriver->SpatialNetDriverStats.ComponentUpdatesReceived;
+#endif
 			QueuedComponentUpdateOps.Add(Op);
 			StaticComponentView->OnComponentUpdate(Op->component_update);
 			break;

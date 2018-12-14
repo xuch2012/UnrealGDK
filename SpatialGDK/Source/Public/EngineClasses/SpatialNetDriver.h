@@ -50,6 +50,19 @@ private:
 	FString WorkerId;
 };
 
+struct FSpatialNetDriverStats
+{
+	int32 NumNewActorsReplicated;
+	int32 NumReplicateActorCalls;
+	int32 OpsReceived;
+	int32 RpcsSent;
+	int32 RpcsReceived;
+	int32 MulticastRpcsSent;
+	int32 MulticastRpcsReceived;
+	int32 ComponentUpdatesSent;
+	int32 ComponentUpdatesReceived;
+};
+
 UCLASS()
 class SPATIALGDK_API USpatialNetDriver : public UIpNetDriver
 {
@@ -66,6 +79,7 @@ public:
 	virtual void TickDispatch(float DeltaTime) override;
 	virtual void ProcessRemoteFunction(class AActor* Actor, class UFunction* Function, void* Parameters, struct FOutParmRec* OutParms, struct FFrame* NotStack, class UObject* SubObject = NULL ) override;
 	virtual void TickFlush(float DeltaTime) override;
+	virtual void PostTickFlush() override;
 	virtual bool IsLevelInitializedForActor(const AActor* InActor, const UNetConnection* InConnection) const override;
 	virtual void NotifyActorDestroyed(AActor* Actor, bool IsSeamlessTravel = false) override;
 	// End UNetDriver interface.
@@ -120,6 +134,8 @@ public:
 	UEntityRegistry* EntityRegistry;
 	UPROPERTY()
 	USnapshotManager* SnapshotManager;
+
+	FSpatialNetDriverStats SpatialNetDriverStats;
 
 	TMap<UClass*, TPair<AActor*, USpatialActorChannel*>> SingletonActorChannels;
 

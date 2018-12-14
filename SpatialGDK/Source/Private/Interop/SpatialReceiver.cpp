@@ -806,6 +806,9 @@ void USpatialReceiver::ReceiveMulticastUpdate(const Worker_ComponentUpdate& Comp
 			int64 CountBits = PayloadData.Num() * 8;
 
 			ApplyRPC(TargetObject, Function, PayloadData, CountBits);
+#if !UE_BUILD_SHIPPING
+			++NetDriver->SpatialNetDriverStats.MulticastRpcsReceived;
+#endif
 		}
 	}
 }
@@ -1072,6 +1075,9 @@ void USpatialReceiver::ResolveIncomingRPCs(UObject* Object, const FUnrealObjectR
 		if (IncomingRPC->UnresolvedRefs.Num() == 0)
 		{
 			ApplyRPC(IncomingRPC->TargetObject.Get(), IncomingRPC->Function, IncomingRPC->PayloadData, IncomingRPC->CountBits);
+#if !UE_BUILD_SHIPPING
+			++NetDriver->SpatialNetDriverStats.RpcsReceived;
+#endif
 		}
 	}
 
@@ -1202,4 +1208,7 @@ void USpatialReceiver::ReceiveRPCCommandRequest(const Worker_CommandRequest& Com
 	int64 CountBits = PayloadData.Num() * 8;
 
 	ApplyRPC(TargetObject, Function, PayloadData, CountBits);
+#if !UE_BUILD_SHIPPING
+	++NetDriver->SpatialNetDriverStats.RpcsReceived;
+#endif
 }

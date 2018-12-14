@@ -271,6 +271,9 @@ void USpatialSender::SendComponentUpdates(UObject* Object, FClassInfo* Info, USp
 		}
 
 		Connection->SendComponentUpdate(EntityId, &Update);
+#if !UE_BUILD_SHIPPING
+		++NetDriver->SpatialNetDriverStats.ComponentUpdatesSent;
+#endif
 	}
 }
 
@@ -388,6 +391,9 @@ void USpatialSender::SendRPC(TSharedRef<FPendingRPCParams> Params)
 		{
 			check(EntityId != SpatialConstants::INVALID_ENTITY_ID);
 			Worker_RequestId RequestId = Connection->SendCommandRequest(EntityId, &CommandRequest, RPCInfo->Index + 1);
+#if !UE_BUILD_SHIPPING
+			++NetDriver->SpatialNetDriverStats.RpcsSent;
+#endif
 
 			if (Params->Function->HasAnyFunctionFlags(FUNC_NetReliable))
 			{
@@ -413,6 +419,9 @@ void USpatialSender::SendRPC(TSharedRef<FPendingRPCParams> Params)
 			}
 
 			Connection->SendComponentUpdate(EntityId, &ComponentUpdate);
+#if !UE_BUILD_SHIPPING
+			++NetDriver->SpatialNetDriverStats.MulticastRpcsSent;
+#endif
 		}
 		break;
 	}

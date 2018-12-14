@@ -30,7 +30,44 @@
 #include "SpatialConstants.h"
 #include "Utils/EntityRegistry.h"
 
+#include "SpatialStats.h"
+
 DEFINE_LOG_CATEGORY(LogSpatialOSNetDriver);
+
+namespace {
+struct FScopedSpatialNetDriverStatsUpdater
+{
+	FScopedSpatialNetDriverStatsUpdater(FSpatialNetDriverStats& Stats)
+		: Stats(Stats)
+	{
+	}
+
+	~FScopedSpatialNetDriverStatsUpdater()
+	{
+		SET_DWORD_STAT(STAT_SpatialNetActorsUpdated, Stats.NumReplicateActorCalls);
+		Stats.NumReplicateActorCalls = 0;
+		SET_DWORD_STAT(STAT_SpatialNetNewActorsReplicated, Stats.NumNewActorsReplicated);
+		Stats.NumNewActorsReplicated = 0;
+		SET_DWORD_STAT(STAT_SpatialNetOpsReceived, Stats.OpsReceived );
+		Stats.OpsReceived = 0;
+		SET_DWORD_STAT(STAT_SpatialNetRpcsSent, Stats.RpcsSent );
+		Stats.RpcsSent = 0;
+		SET_DWORD_STAT(STAT_SpatialNetRpcsReceived, Stats.RpcsReceived );
+		Stats.RpcsReceived = 0;
+		SET_DWORD_STAT(STAT_SpatialNetMulticastRpcsSent, Stats.MulticastRpcsSent );
+		Stats.MulticastRpcsSent = 0;
+		SET_DWORD_STAT(STAT_SpatialNetMulticastRpcsReceived, Stats.MulticastRpcsReceived );
+		Stats.MulticastRpcsReceived = 0;
+		SET_DWORD_STAT(STAT_SpatialNetComponentUpdatesSent, Stats.ComponentUpdatesSent );
+		Stats.ComponentUpdatesSent = 0;
+		SET_DWORD_STAT(STAT_SpatialNetComponentUpdatesReceived, Stats.ComponentUpdatesReceived );
+		Stats.ComponentUpdatesReceived = 0;
+	}
+
+private:
+	FSpatialNetDriverStats& Stats;
+};
+}  // namespace
 
 bool USpatialNetDriver::InitBase(bool bInitAsClient, FNetworkNotify* InNotify, const FURL& URL, bool bReuseAddressAndPort, FString& Error)
 {
@@ -761,6 +798,9 @@ int32 USpatialNetDriver::ServerReplicateActors_ProcessPrioritizedActors(UNetConn
 
 						if (Channel->ReplicateActor())
 						{
+#if !UE_BUILD_SHIPPING
+							++SpatialNetDriverStats.NumReplicateActorCalls;
+#endif
 							ActorUpdatesThisConnectionSent++;
 							if (DebugRelevantActors)
 							{
@@ -1074,6 +1114,14 @@ void USpatialNetDriver::TickFlush(float DeltaTime)
 	}
 
 	Super::TickFlush(DeltaTime);
+}
+
+void USpatialNetDriver::PostTickFlush()
+{
+#if !UE_BUILD_SHIPPING
+	FScopedSpatialNetDriverStatsUpdater Updater(SpatialNetDriverStats);
+#endif
+	Super::PostTickFlush();
 }
 
 USpatialNetConnection * USpatialNetDriver::GetSpatialOSNetConnection() const
