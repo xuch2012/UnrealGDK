@@ -63,3 +63,12 @@ void USpatialNetConnection::Tick()
 	}
 	Super::Tick();
 }
+
+int32 USpatialNetConnection::IsNetReady(bool Saturate)
+{
+	if (ActorsReplicatedThisFrame >= MaxActorsToReplicatePerFrame)
+	{
+		return false;
+	}
+	return true;
+}

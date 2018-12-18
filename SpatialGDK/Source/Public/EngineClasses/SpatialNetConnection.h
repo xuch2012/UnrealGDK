@@ -21,6 +21,11 @@ public:
 	virtual bool ClientHasInitializedLevelFor(const AActor* TestActor) const override;
 	virtual void Tick() override;
 
+	virtual int32 IsNetReady(bool Saturate) override;
+	void ReplicateActor() { ++ActorsReplicatedThisFrame; }
+	void ResetReplicatedActorCount() { ActorsReplicatedThisFrame = 0; }
+	void SetMaxActorsToReplicatePerFrame(int32 NewValue) { MaxActorsToReplicatePerFrame = NewValue; }
+
 	// These functions don't make a lot of sense in a SpatialOS implementation.
 	virtual FString LowLevelGetRemoteAddress(bool bAppendPort = false) override { return TEXT(""); }
 	virtual FString LowLevelDescribe() override { return TEXT(""); }
@@ -29,4 +34,8 @@ public:
 
 	UPROPERTY()
 	bool bReliableSpatialConnection;
+
+private:
+	int32 ActorsReplicatedThisFrame = 0;
+	int32 MaxActorsToReplicatePerFrame = 20;
 };

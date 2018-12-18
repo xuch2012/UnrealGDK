@@ -798,6 +798,10 @@ int32 USpatialNetDriver::ServerReplicateActors_ProcessPrioritizedActors(UNetConn
 
 						if (Channel->ReplicateActor())
 						{
+							if (USpatialNetConnection* SpatialNetConnection = Cast<USpatialNetConnection>(InConnection))
+							{
+								SpatialNetConnection->ReplicateActor();
+							}
 #if !UE_BUILD_SHIPPING
 							++SpatialNetDriverStats.NumReplicateActorCalls;
 #endif
@@ -900,6 +904,7 @@ int32 USpatialNetDriver::ServerReplicateActors(float DeltaSeconds)
 	{
 		USpatialNetConnection* SpatialConnection = Cast<USpatialNetConnection>(ClientConnections[i]);
 		check(SpatialConnection);
+		SpatialConnection->ResetReplicatedActorCount();
 
 		// if this client shouldn't be ticked this frame
 		if (i >= NumClientsToTick)

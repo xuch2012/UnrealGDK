@@ -17,12 +17,19 @@ void USpatialDispatcher::Init(USpatialNetDriver* InNetDriver)
 	StaticComponentView = InNetDriver->StaticComponentView;
 }
 
+#pragma optimize("", off)
 void USpatialDispatcher::ProcessOps(Worker_OpList* OpList)
 {
 	TArray<Worker_Op*> QueuedComponentUpdateOps;
 
+	TMap<Worker_EntityId, int32> AddedEntities;
+	TMap<Worker_EntityId, int32> RemovedEntities;
+
 	for (size_t i = 0; i < OpList->op_count; ++i)
 	{
+#if !UE_BUILD_SHIPPING
+		++NetDriver->SpatialNetDriverStats.OpsReceived;
+#endif
 		Worker_Op* Op = &OpList->ops[i];
 		switch (Op->op_type)
 		{
@@ -34,10 +41,12 @@ void USpatialDispatcher::ProcessOps(Worker_OpList* OpList)
 		// Entity Lifetime
 		case WORKER_OP_TYPE_ADD_ENTITY:
 			Receiver->OnAddEntity(Op->add_entity);
+			++AddedEntities.FindOrAdd(Op->add_entity.entity_id);
 			break;
 		case WORKER_OP_TYPE_REMOVE_ENTITY:
 			Receiver->OnRemoveEntity(Op->remove_entity);
 			StaticComponentView->OnRemoveEntity(Op->remove_entity);
+			++RemovedEntities.FindOrAdd(Op->add_entity.entity_id);
 			break;
 
 		// Components
@@ -103,6 +112,39 @@ void USpatialDispatcher::ProcessOps(Worker_OpList* OpList)
 		}
 	}
 
+	bool bDoBreak = false;
+	TSet<Worker_EntityId> BadEntities;
+	for (auto Pair : AddedEntities)
+	{
+		if (Pair.Value != 1)
+		{
+			bDoBreak = true;
+			BadEntities.Add(Pair.Key);
+		}
+		if (RemovedEntities.Contains(Pair.Key))
+		{
+			bDoBreak = true;
+			BadEntities.Add(Pair.Key);
+		}
+	}
+	for (auto Pair : RemovedEntities)
+	{
+		if (Pair.Value != 1)
+		{
+			bDoBreak = true;
+			BadEntities.Add(Pair.Key);
+		}
+	}
+
+	//check(!bDoBreak);
+	if (bDoBreak)
+	{
+		for (auto E : BadEntities)
+		{
+			UE_LOG(LogTemp, Error, TEXT("Received multiple add/remove ops for entity %lld in a single frame"), E);
+		}
+	}
+
 	for (Worker_Op* Op : QueuedComponentUpdateOps)
 	{
 		Receiver->OnComponentUpdate(Op->component_update);
@@ -118,3 +160,4 @@ void USpatialDispatcher::ProcessOps(Worker_OpList* OpList)
 		}
 	}
 }
+#pragma optimize("", on)
