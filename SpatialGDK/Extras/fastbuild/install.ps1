@@ -1,13 +1,16 @@
 param (
-    [switch]$service=$false
+    [switch]$service=$false,
+    [switch]$skipfirewall=$false,
+    [switch]$skipstartup=$false,
+    [string]$fileshare="\\lonv-file-01",
+    [string]$version="v0.96",
+    [string]$rootPath=[System.Io.Path]::GetFullPath("$env:HOMEDRIVE:\tools\fastbuild")
 )
+
+Write-Host "Installing FASTBuild '$version' to '$rootPath'. Cache/Brokerage root is '$fileshare'."
 
 Import-Module BitsTransfer
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-$fileshare="\\lonv-file-01"
-$version="v0.96"
-$rootPath=[System.Io.Path]::GetFullPath("$env:HOMEDRIVE:\tools\fastbuild")
 
 If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "Please run from an Adminstrator command prompt." -ForegroundColor Red
@@ -44,68 +47,72 @@ Set-Acl -Path $rootPath -AclObject $acl | Out-Null
 # This copy is the one that accesses the network, so that's what we add to the firewall.
 $fbuildWorkerCopyPath = [System.IO.Path]::GetFullPath("$rootPath\FBuildWorker.exe.copy")
 
-$port="31264"
+if ($skipfirewall) {
+    Write-Host "FASTBuild has not been added to the firewall."
+} else {
+    $port="31264"
 
-Write-Host "Adding to firewall..."
-New-NetFirewallRule -Name "FBuild (Outbound)" `
-    -DisplayName "FBuild (Outbound)" `
-    -Group "FASTBuild" `
-    -Description "Allow distributed compiling via the FASTBuild driver" `
-    -Enabled True `
-    -Direction Outbound `
-    -Protocol TCP `
-    -LocalPort $port `
-    -Program "$fbuildPath" `
-    -Action Allow `
-    -ErrorAction Stop | Out-Null
+    Write-Host "Adding to firewall..."
+    New-NetFirewallRule -Name "FBuild (Outbound)" `
+        -DisplayName "FBuild (Outbound)" `
+        -Group "FASTBuild" `
+        -Description "Allow distributed compiling via the FASTBuild driver" `
+        -Enabled True `
+        -Direction Outbound `
+        -Protocol TCP `
+        -LocalPort $port `
+        -Program "$fbuildPath" `
+        -Action Allow `
+        -ErrorAction Stop | Out-Null
 
-New-NetFirewallRule -Name "FBuildWorker (Outbound)" `
-    -DisplayName "FBuildWorker (Outbound)" `
-    -Group "FASTBuild" `
-    -Description "Allow distributed compiling via the FASTBuild worker" `
-    -Enabled True `
-    -Direction Outbound `
-    -Protocol TCP `
-    -LocalPort $port `
-    -Program "$fbuildWorkerCopyPath" `
-    -Action Allow `
-    -ErrorAction Stop | Out-Null
+    New-NetFirewallRule -Name "FBuildWorker (Outbound)" `
+        -DisplayName "FBuildWorker (Outbound)" `
+        -Group "FASTBuild" `
+        -Description "Allow distributed compiling via the FASTBuild worker" `
+        -Enabled True `
+        -Direction Outbound `
+        -Protocol TCP `
+        -LocalPort $port `
+        -Program "$fbuildWorkerCopyPath" `
+        -Action Allow `
+        -ErrorAction Stop | Out-Null
 
-New-NetFirewallRule -Name "FBuildWorker (Inbound)" `
-    -DisplayName "FBuildWorker (Inbound)" `
-    -Group "FASTBuild" `
-    -Description "Allow distributed compiling via the FASTBuild worker" `
-    -Enabled True `
-    -Direction Inbound `
-    -Protocol TCP `
-    -LocalPort $port `
-    -Program "$fbuildWorkerCopyPath" `
-    -Action Allow `
-    -ErrorAction Stop | Out-Null
+    New-NetFirewallRule -Name "FBuildWorker (Inbound)" `
+        -DisplayName "FBuildWorker (Inbound)" `
+        -Group "FASTBuild" `
+        -Description "Allow distributed compiling via the FASTBuild worker" `
+        -Enabled True `
+        -Direction Inbound `
+        -Protocol TCP `
+        -LocalPort $port `
+        -Program "$fbuildWorkerCopyPath" `
+        -Action Allow `
+        -ErrorAction Stop | Out-Null
 
-New-NetFirewallRule -Name "FBuildWorker.Copy (Outbound)" `
-    -DisplayName "FBuildWorker.Copy (Outbound)" `
-    -Group "FASTBuild" `
-    -Description "Allow distributed compiling via the FASTBuild worker" `
-    -Enabled True `
-    -Direction Outbound `
-    -Protocol TCP `
-    -LocalPort $port `
-    -Program "$fbuildWorkerPath" `
-    -Action Allow `
-    -ErrorAction Stop | Out-Null
+    New-NetFirewallRule -Name "FBuildWorker.Copy (Outbound)" `
+        -DisplayName "FBuildWorker.Copy (Outbound)" `
+        -Group "FASTBuild" `
+        -Description "Allow distributed compiling via the FASTBuild worker" `
+        -Enabled True `
+        -Direction Outbound `
+        -Protocol TCP `
+        -LocalPort $port `
+        -Program "$fbuildWorkerPath" `
+        -Action Allow `
+        -ErrorAction Stop | Out-Null
 
-New-NetFirewallRule -Name "FBuildWorker.Copy (Inbound)" `
-    -DisplayName "FBuildWorker.Copy (Inbound)" `
-    -Group "FASTBuild" `
-    -Description "Allow distributed compiling via the FASTBuild worker" `
-    -Enabled True `
-    -Direction Inbound `
-    -Protocol TCP `
-    -LocalPort $port `
-    -Program "$fbuildWorkerPath" `
-    -Action Allow `
-    -ErrorAction Stop | Out-Null
+    New-NetFirewallRule -Name "FBuildWorker.Copy (Inbound)" `
+        -DisplayName "FBuildWorker.Copy (Inbound)" `
+        -Group "FASTBuild" `
+        -Description "Allow distributed compiling via the FASTBuild worker" `
+        -Enabled True `
+        -Direction Inbound `
+        -Protocol TCP `
+        -LocalPort $port `
+        -Program "$fbuildWorkerPath" `
+        -Action Allow `
+        -ErrorAction Stop | Out-Null
+}
 
 Write-Host "Setting environment variables..."
 [System.Environment]::SetEnvironmentVariable("FASTBUILD_EXE_PATH", $fbuildPath, [System.EnvironmentVariableTarget]::Machine)
@@ -113,39 +120,43 @@ Write-Host "Setting environment variables..."
 [System.Environment]::SetEnvironmentVariable("FASTBUILD_BROKERAGE_PATH", "$fileshare\fastbuild\Brokerage", [System.EnvironmentVariableTarget]::Machine)
 [System.Environment]::SetEnvironmentVariable("FASTBUILD_CACHE_MODE", "rw", [System.EnvironmentVariableTarget]::Machine)
 
-Write-Host "Setting up FASTBuild to startup on login..."
-
-if ($service) {
-    # Install a service manager to wrap FBuildWorker so it can run as a service.
-    # http://nssm.cc
-    Start-Process "choco" "install","nssm","-y","--version=2.24.101.20180116" -Wait -ErrorAction Stop -NoNewWindow
-    refreshenv
-
-    $serviceName="FASTBuildWorker-$version"
-
-    Write-Host "Installing $serviceName service..."
-
-    Start-Process nssm.exe "install",$serviceName,"$fbuildWorkerPath","-console","-nosubprocess","-cpus=100%" -Wait -ErrorAction Stop -NoNewWindow
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install $serviceName"
-    }
-    Start-Process nssm.exe "set",$serviceName,"Start","SERVICE_DELAYED_AUTO_START"-Wait -ErrorAction Stop -NoNewWindow
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to set $serviceName Start type"
-    }
-    Start-Service -Name $serviceName
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to start $serviceName"
-    }
+if ( $skipstartup) {
+    Write-Host "FASTBuild must be started manually."
 } else {
-    Write-Host "Adding to startup group..."
-    # Set to run on startup.
-    New-ItemProperty `
-        -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\ `
-        -Name "FBuildWorker" `
-        -Value """$fbuildWorkerPath""" -Force | Out-Null
+    Write-Host "Setting up FASTBuild to startup on login..."
 
-    Start-Process "$fbuildWorkerPath" -ErrorAction Stop
+    if ($service) {
+        # Install a service manager to wrap FBuildWorker so it can run as a service.
+        # http://nssm.cc
+        Start-Process "choco" "install","nssm","-y","--version=2.24.101.20180116" -Wait -ErrorAction Stop -NoNewWindow
+        refreshenv
+
+        $serviceName="FASTBuildWorker-$version"
+
+        Write-Host "Installing $serviceName service..."
+
+        Start-Process nssm.exe "install",$serviceName,"$fbuildWorkerPath","-console","-nosubprocess","-cpus=100%" -Wait -ErrorAction Stop -NoNewWindow
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install $serviceName"
+        }
+        Start-Process nssm.exe "set",$serviceName,"Start","SERVICE_DELAYED_AUTO_START"-Wait -ErrorAction Stop -NoNewWindow
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to set $serviceName Start type"
+        }
+        Start-Service -Name $serviceName
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to start $serviceName"
+        }
+    } else {
+        Write-Host "Adding to startup group..."
+        # Set to run on startup.
+        New-ItemProperty `
+            -Path HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run\ `
+            -Name "FBuildWorker" `
+            -Value """$fbuildWorkerPath""" -Force | Out-Null
+
+        Start-Process "$fbuildWorkerPath" -ErrorAction Stop
+    }
 }
 
 Write-Host "Finished!" -ForegroundColor Green
