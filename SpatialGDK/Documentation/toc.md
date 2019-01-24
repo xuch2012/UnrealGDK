@@ -2,9 +2,8 @@
 - <h3>[- Welcome]({{urlRoot}}/welcome)</h3>
 - <h3>+ Get started</h3>
     - [Introduction]({{urlRoot}}/content/get-started/introduction)
-    - [1: Get the dependencies]({{urlRoot}}/content/get-started/dependencies)
-    - [2: Get and build the GDK’s Unreal Engine Fork]({{urlRoot}}/content/get-started/build-unreal-fork)
-    - [3: Follow the Multiserver Shooter tutorial]({{urlRoot}}/content/get-started/tutorial)
+    - [1: Get Started: Set up]({{urlRoot}}/content/get-started/get-started)
+    - [2: Get Started: Follow the Multiserver Shooter tutorial]({{urlRoot}}/content/get-started/tutorial)
     - Next steps - either:
         - [Set up and run the Starter Project]({{urlRoot}}/content/get-started/gdk-and-starter-project)
         - [Port your own project to the GDK]({{urlRoot}}/content/get-started/porting-unreal-project-to-gdk)

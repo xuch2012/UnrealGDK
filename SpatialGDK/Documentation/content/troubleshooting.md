@@ -40,7 +40,7 @@ Yes you can! In the `Unreal Editor`, select the `Play` dropdown from the toolbar
 I’m getting the following compilation error when building the GDK: `Error C2248: FRepLayout::Cmds': cannot access private member declared in class 'FRepLayout`.
 
 #### A: 
-You're building against an unsupported version of Unreal Engine. Make sure you're targeting the fork of Unreal Engine that the GDK requires. See the [setup guide]({{urlRoot}}/content/get-started/dependencies) for more details.
+You're building against an unsupported version of Unreal Engine. Make sure you're targeting the fork of Unreal Engine that the GDK requires. See the [setup guide]({{urlRoot}}/content/get-started/get-started) for more details.
 <br/>
 -----
 

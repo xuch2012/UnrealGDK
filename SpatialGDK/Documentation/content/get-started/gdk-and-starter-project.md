@@ -2,8 +2,7 @@
 
 Before starting this, you need to have followed:
 
-* [Getting started: 1 - Dependencies]({{urlRoot}}/content/get-started/dependencies)
-* [Getting started: 2 - Get and build the GDK’s Unreal Engine Fork]({{urlRoot}}/content/get-started/build-unreal-fork)
+* [Get  started: 1 - Set up]({{urlRoot}}/content/get-started/get-started)
 
 This step has three parts; clone the repositories, build the dependencies and deploy the game. You can deploy locally on your development machine and in the cloud.
 
@@ -21,7 +20,7 @@ Now, you are going to clone the Starter Project repository and then clone the GD
 
 **Note** You need to ensure that the root folder of the GDK for Unreal repository is called `UnrealGDK` so its path is: `<StarterProjectRepoRoot>\Game\Plugins\UnrealGDK\...`
 
-[//]: # (TODO: This whole section below deserves some screenshots to show users what to expect. This was done well on the Unity onobarding docs. Example: https://docs.improbable.io/unity/alpha/content/get-started/get-playing)	
+[//]: # "TODO: This whole section below deserves some screenshots to show users what to expect. This was done well on the Unity onobarding docs. Example: https://docs.improbable.io/unity/alpha/content/get-started/get-playing"
 
 ### Build dependencies 
 

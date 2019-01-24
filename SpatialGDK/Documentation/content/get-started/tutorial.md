@@ -1,4 +1,4 @@
-# Get started: 3 - Follow the Multiserver Shooter tutorial
+# Get started: 2 - Follow the Multiserver Shooter tutorial
 
 ### What will be covered?
 
@@ -92,7 +92,7 @@ To resolve this you need to mark the `CurrentHealth` property for replication, j
 
 1. In your IDE, open `UnrealGDKThirdPersonShooter\Game\Source\ThirdPersonShooter\Characters\TPSCharacter.h`.
 1. In the public scope of the class, insert the following snippet:
-    
+  
     ```	
     UFUNCTION()
     void OnRep_CurrentHealth();

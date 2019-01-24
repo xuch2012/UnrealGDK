@@ -7,10 +7,9 @@ As an experienced UE4 developer, you likely have a prototype or a game already. 
 ## Before you start
 
 Before porting your project: 
- 
-* If you haven't done this already, install SpatialOS and the GDK's dependencies and clone the SpatialOS Unreal Engine fork by following:
-    * [Getting started: 1 - Dependencies]({{urlRoot}}/content/get-started/dependencies)
-    * [Getting started: 2 - Get and build the GDK’s Unreal Engine Fork]({{urlRoot}}/content/get-started/build-unreal-fork)
+
+* If you haven't done this already, install SpatialOS and the GDK's dependencies and clone the SpatialOS Unreal Engine fork by following: [Get  started: 1 - Set up]({{urlRoot}}/content/get-started/get-started)
+  
 * If you haven't done this already, clone the GDK repository by following [our setup guide]({{urlRoot}}/content/get-started/gdk-and-starter-project). Later in this guide, you will copy some necessary files from Starter Project over to yours.
 
 * Make sure your Spatial CLI is up to date: from a terminal window, run the command `spatial update`. 
@@ -35,7 +34,7 @@ Before porting your project:
     > This step is essential as the `spatial` folder must be located in the directory above your `<GameRoot>`. This is so that the GDK scripts work correctly with Unreal.
 1. Your game's project needs some extra files and folders to run with the GDK; you can copy these from the `StarterProject` repository that you cloned earlier in the [Before you start](#before-you-start) section.
 
-    To do this: either in a terminal window or your file manager, navigate to the root of the `StarterProject` repository and copy all of the files and folders below to your `<ProjectRoot>`:  
+    To do this: either in a terminal window or your file manager, navigate to the root of the `StarterProject` repository and copy all of the files and folders below to your `<ProjectRoot>`: 
 
     ``` cpp
     \StarterProject\spatial\
@@ -59,14 +58,14 @@ Before porting your project:
    Open **`\<ProjectRoot>\ProjectPaths.bat`** for editing and:  
 
     * In `set PROJECT_PATH=Game`, replace `Game` with your `<GameRoot>` folder name.  
-    * In `set GAME_NAME=StarterProject`, replace `StarterProject` with the name of your game's `.uproject` (`<YourProject>` [terms used in this guide](#terms-used-in-this-guide)).  
-    
+    * In `set GAME_NAME=StarterProject`, replace `StarterProject` with the name of your game's `.uproject` (`<YourProject>` [terms used in this guide](#terms-used-in-this-guide)).
+  
     > Doing this incorrectly will result in the helper scripts `LaunchClient.bat` and `LaunchServer.bat` not working and printing that the path specified does not exist when trying to use them.
 
 1. Run `Setup.bat` which is in the root directory of the GDK repository you cloned (this should be `<ProjectRoot>\<GameRoot>\Plugins\UnrealGDK\`). To do this either:
     - In a terminal window, navigate to the root directory of the GDK and run: `Setup.bat` or
     - In your file manager, double-click the file.
-  
+    
     > Note: This requires authorization with your SpatialOS account via a web browser. `Setup.bat` will launch the authorization page.
 
 ### 2. Add the SpatialGDK module to your project
