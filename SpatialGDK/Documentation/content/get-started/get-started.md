@@ -1,5 +1,7 @@
 # Get started: Set up
 
+<%(TOC)%>
+
 To start using the GDK for unreal, you need to ensure you have the correct software installed and that your machine is capable of running Unreal Engine. 
 
 ## Sign up for a SpatialOS account, or make sure you are logged in
