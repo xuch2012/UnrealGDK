@@ -30,6 +30,7 @@
 #include "EngineClasses/SpatialPendingNetGame.h"
 #include "SpatialConstants.h"
 #include "Utils/EntityRegistry.h"
+#include "Utils/EntityPool.h"
 
 DEFINE_LOG_CATEGORY(LogSpatialOSNetDriver);
 
@@ -212,6 +213,7 @@ void USpatialNetDriver::OnMapLoadedAndConnected()
 	PlayerSpawner = NewObject<USpatialPlayerSpawner>();
 	StaticComponentView = NewObject<USpatialStaticComponentView>();
 	SnapshotManager = NewObject<USnapshotManager>();
+	EntityPool = NewObject<UEntityPool>();
 
 	PlayerSpawner->Init(this, TimerManager);
 
@@ -245,6 +247,7 @@ void USpatialNetDriver::OnMapLoadedAndConnected()
 	Receiver->Init(this, TimerManager);
 	GlobalStateManager->Init(this, TimerManager);
 	SnapshotManager->Init(this);
+	EntityPool->Init(this);
 
 	// Bind the ProcessServerTravel delegate to the spatial variant. This ensures that if ServerTravel is called and Spatial networking is enabled, we can travel properly.
 	GetWorld()->SpatialProcessServerTravelDelegate.BindStatic(SpatialProcessServerTravel);
